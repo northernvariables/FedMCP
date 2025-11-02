@@ -1438,19 +1438,43 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         elif name == "get_bill_legislative_progress":
             try:
                 bill_number = arguments["bill_number"]
-                session = arguments.get("session", "45-1")  # Default to current session
+                session = arguments.get("session")  # Get session if provided
                 logger.info(f"get_bill_legislative_progress called with bill_number={bill_number}, session={session}")
 
-                # Get bill details from LEGISinfo
-                bills = await run_sync(legis_client.get_bill, session, bill_number)
+                # Normalize bill number (e.g., "Bill C-319" -> "c-319")
+                bill_code = bill_number.upper().replace('BILL ', '').strip().lower()
 
-                if not bills or not isinstance(bills, list) or len(bills) == 0:
+                # Try to find bill across sessions
+                bill = None
+                searched_sessions = []
+
+                # If session provided, try that first
+                if session:
+                    sessions_to_try = [session, '45-1', '44-1', '43-2', '43-1']
+                else:
+                    # Try recent sessions in order
+                    sessions_to_try = ['45-1', '44-1', '43-2', '43-1', '42-1']
+
+                for sess in sessions_to_try:
+                    if sess in searched_sessions:
+                        continue  # Skip duplicates
+                    searched_sessions.append(sess)
+
+                    try:
+                        bills = await run_sync(legis_client.get_bill, sess, bill_code)
+                        if bills and isinstance(bills, list) and len(bills) > 0:
+                            bill = bills[0]
+                            logger.info(f"Found bill {bill_code} in session {sess}")
+                            break  # Found it!
+                    except:
+                        continue  # Try next session
+
+                if not bill:
                     return [TextContent(
                         type="text",
-                        text=f"No bill found for {bill_number} in session {session}. Try a different session or check the bill number."
+                        text=f"Bill {bill_number} not found in sessions: {', '.join(searched_sessions)}.\n\n" +
+                             f"Please check the bill number or specify the correct session."
                     )]
-
-                bill = bills[0]  # Get first result
 
                 response_parts = [
                     f"Legislative Progress for Bill {bill_number}\n",
@@ -1583,10 +1607,44 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 response_parts.append(f"BILLS\n")
                 response_parts.append(f"-" * 50 + "\n")
                 try:
-                    bills = list(islice(await run_sync(op_client.list_bills, q=topic), limit))
+                    bills = []
+
+                    # Detect if topic is a bill number
+                    topic_upper = topic.upper()
+                    is_bill_number = topic_upper.startswith(('C-', 'S-', 'BILL C-', 'BILL S-')) and len(topic) < 20
+
+                    # If it's a bill number, try LEGISinfo across recent sessions
+                    if is_bill_number:
+                        # Extract bill code (e.g., "C-319" from "Bill C-319")
+                        bill_code = topic_upper.replace('BILL ', '').strip().lower()
+                        # Try recent sessions
+                        for session in ['45-1', '44-1', '43-2', '43-1']:
+                            try:
+                                bill_data = await run_sync(legis_client.get_bill, session, bill_code)
+                                if isinstance(bill_data, list) and bill_data:
+                                    bill_info = bill_data[0]
+                                    bills.append({
+                                        'number': bill_info.get('NumberCode', 'N/A'),
+                                        'name': {'en': bill_info.get('LongTitle', 'N/A')},
+                                        'session': f"{bill_info.get('ParliamentNumber')}-{bill_info.get('SessionNumber')}"
+                                    })
+                                    break  # Found it, stop searching
+                            except:
+                                continue  # Try next session
+
+                    # If not found via LEGISinfo or not a bill number, try OpenParliament
+                    if not bills:
+                        bills = list(islice(await run_sync(op_client.list_bills, q=topic), limit))
+
                     if bills:
                         for i, bill in enumerate(bills, 1):
-                            response_parts.append(f"{i}. {bill.get('number', 'N/A')} - {bill.get('name', {}).get('en', 'N/A')[:80]}\n")
+                            bill_num = bill.get('number', 'N/A')
+                            bill_name = bill.get('name', {}).get('en', 'N/A')[:80]
+                            session_info = bill.get('session', '')
+                            if session_info:
+                                response_parts.append(f"{i}. {bill_num} ({session_info}) - {bill_name}\n")
+                            else:
+                                response_parts.append(f"{i}. {bill_num} - {bill_name}\n")
                     else:
                         response_parts.append("No bills found\n")
                 except Exception as e:
@@ -1631,15 +1689,15 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 response_parts.append(f"HANSARD\n")
                 response_parts.append(f"-" * 50 + "\n")
                 try:
-                    sitting = await run_sync(hansard_client.get_latest_sitting)
+                    sitting = await run_sync(hansard_client.get_sitting, "latest/hansard", parse=True)
                     if sitting and sitting.sections:
                         matches = []
                         for section in sitting.sections:
                             for speech in section.speeches:
-                                if topic.lower() in speech.content.lower():
+                                if topic.lower() in speech.text.lower():
                                     matches.append({
-                                        'speaker': speech.person_speaking,
-                                        'content': speech.content[:100]
+                                        'speaker': speech.speaker_name or 'Unknown',
+                                        'content': speech.text[:100]
                                     })
                                     if len(matches) >= limit:
                                         break
