@@ -18,6 +18,7 @@ from mcp.types import (
     TextContent,
     ImageContent,
     EmbeddedResource,
+    Icon,
 )
 import mcp.server.stdio
 
@@ -47,7 +48,12 @@ canlii_api_key = os.getenv("CANLII_API_KEY")
 canlii_client = CanLIIClient(api_key=canlii_api_key) if canlii_api_key else None
 
 # Create server instance
-app = Server("fedmcp")
+app = Server(
+    name="fedmcp",
+    version="1.0.0",
+    instructions="Canadian federal parliamentary and legal information server",
+    icons=[Icon(src="🇨🇦")]
+)
 
 
 # Helper functions
