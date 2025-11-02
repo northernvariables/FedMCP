@@ -60,7 +60,7 @@ flag_b64 = base64.b64encode(CANADIAN_FLAG_SVG.encode()).decode()
 flag_data_uri = f"data:image/svg+xml;base64,{flag_b64}"
 
 app = Server(
-    name="fedmcp",
+    name="Canada GPT",
     version="1.0.0",
     instructions="Canadian federal parliamentary and legal information server",
     icons=[Icon(src=flag_data_uri, mimeType="image/svg+xml")]
