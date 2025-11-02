@@ -4,6 +4,7 @@ from .openparliament import OpenParliamentClient
 from .ourcommons import OurCommonsHansardClient, HansardSitting, HansardSection, HansardSpeech
 from .legisinfo import LegisInfoClient
 from .canlii import CanLIIClient
+from .represent import RepresentClient
 
 __all__ = [
     "OpenParliamentClient",
@@ -13,4 +14,5 @@ __all__ = [
     "HansardSpeech",
     "LegisInfoClient",
     "CanLIIClient",
+    "RepresentClient",
 ]

@@ -165,10 +165,8 @@ class OpenParliamentClient:
         Returns:
             List of ballot records showing how each MP voted
         """
-        # URL-encode the vote parameter
-        import urllib.parse
-        vote_param = urllib.parse.quote(vote_url, safe='')
-        params = {'vote': vote_param, 'limit': limit}
+        # Pass vote URL as-is, requests library will handle URL encoding
+        params = {'vote': vote_url, 'limit': limit}
         response = self._request('/votes/ballots/', params=params)
         return response.get('objects', [])
 

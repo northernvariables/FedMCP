@@ -33,12 +33,14 @@ from .clients import (
     OurCommonsHansardClient,
     LegisInfoClient,
     CanLIIClient,
+    RepresentClient,
 )
 
 # Initialize clients
 op_client = OpenParliamentClient()
 hansard_client = OurCommonsHansardClient()
 legis_client = LegisInfoClient()
+represent_client = RepresentClient()
 
 # Initialize CanLII client if API key is available
 canlii_api_key = os.getenv("CANLII_API_KEY")
@@ -389,6 +391,34 @@ async def list_tools() -> list[Tool]:
                         "default": 50,
                         "minimum": 1,
                         "maximum": 350,
+                    },
+                },
+                "required": ["vote_url"],
+            },
+        ),
+        Tool(
+            name="find_mp_by_postal_code",
+            description="Find your federal Member of Parliament by postal code. Returns MP name, party, riding, and contact information.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "postal_code": {
+                        "type": "string",
+                        "description": "Canadian postal code (e.g., 'K1A 0A9' or 'k1a0a9')",
+                    },
+                },
+                "required": ["postal_code"],
+            },
+        ),
+        Tool(
+            name="analyze_party_discipline",
+            description="Analyze party discipline for a specific vote. Shows which MPs voted against their party's majority position.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "vote_url": {
+                        "type": "string",
+                        "description": "The vote URL (e.g., '/votes/45-1/43/')",
                     },
                 },
                 "required": ["vote_url"],
@@ -1183,6 +1213,166 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             except Exception as e:
                 logger.exception(f"Unexpected error in get_vote_details")
                 return [TextContent(type="text", text=f"Error getting vote details: {sanitize_error_message(e)}")]
+
+        elif name == "find_mp_by_postal_code":
+            try:
+                postal_code = arguments["postal_code"]
+                logger.info(f"find_mp_by_postal_code called with postal_code={postal_code}")
+
+                # Get federal MP by postal code
+                mp = await run_sync(represent_client.get_federal_mp_by_postal_code, postal_code)
+
+                if not mp:
+                    return [TextContent(
+                        type="text",
+                        text=f"No federal MP found for postal code '{postal_code}'. Please verify the postal code is correct."
+                    )]
+
+                # Format the response with MP information
+                response_parts = [
+                    f"Your Federal Member of Parliament:\n\n",
+                    f"Name: {mp.get('name', 'N/A')}\n",
+                    f"Party: {mp.get('party_name', 'N/A')}\n",
+                    f"Riding: {mp.get('district_name', 'N/A')}\n",
+                ]
+
+                # Add contact information if available
+                if mp.get('email'):
+                    response_parts.append(f"Email: {mp.get('email')}\n")
+                if mp.get('url'):
+                    response_parts.append(f"Website: {mp.get('url')}\n")
+
+                # Add office information if available
+                offices = mp.get('offices', [])
+                if offices:
+                    response_parts.append("\nOffices:\n")
+                    for office in offices:
+                        office_type = office.get('type', 'Office')
+                        if office.get('postal'):
+                            response_parts.append(f"  {office_type}:\n")
+                            response_parts.append(f"    {office.get('postal', '').strip()}\n")
+                        if office.get('tel'):
+                            response_parts.append(f"    Phone: {office.get('tel')}\n")
+                        if office.get('fax'):
+                            response_parts.append(f"    Fax: {office.get('fax')}\n")
+
+                # Add social media if available
+                social = []
+                for key in ['twitter', 'facebook', 'instagram']:
+                    if mp.get(key):
+                        social.append(f"{key.title()}: {mp.get(key)}")
+                if social:
+                    response_parts.append(f"\nSocial Media: {', '.join(social)}\n")
+
+                return [TextContent(type="text", text="".join(response_parts))]
+
+            except KeyError as e:
+                logger.warning(f"Missing required parameter for find_mp_by_postal_code: {e}")
+                return [TextContent(type="text", text=f"Missing required parameter: {str(e)}")]
+            except ValueError as e:
+                logger.warning(f"Invalid input for find_mp_by_postal_code: {e}")
+                return [TextContent(type="text", text=f"Invalid input: {str(e)}")]
+            except Exception as e:
+                logger.exception(f"Unexpected error in find_mp_by_postal_code")
+                return [TextContent(type="text", text=f"Error finding MP by postal code: {sanitize_error_message(e)}")]
+
+        elif name == "analyze_party_discipline":
+            try:
+                vote_url = arguments["vote_url"]
+                logger.info(f"analyze_party_discipline called with vote_url={vote_url}")
+
+                # Get vote details
+                vote = await run_sync(op_client.get_vote, vote_url)
+
+                # Get all individual ballots (limit 350 covers all MPs)
+                ballots = await run_sync(op_client.get_vote_ballots, vote_url, 350)
+
+                if not ballots:
+                    return [TextContent(
+                        type="text",
+                        text=f"No ballot data available for this vote."
+                    )]
+
+                # Group ballots by party
+                from collections import defaultdict
+                party_ballots = defaultdict(list)
+
+                for ballot in ballots:
+                    politician_url = ballot.get('politician_url', '')
+                    ballot_value = ballot.get('ballot', 'Unknown')
+
+                    # Get politician details to find their party
+                    try:
+                        politician = await run_sync(op_client.get_politician, politician_url)
+                        party_name = politician.get('current_party', {}).get('short_name', {}).get('en', 'Unknown')
+
+                        party_ballots[party_name].append({
+                            'name': politician.get('name', 'Unknown'),
+                            'riding': politician.get('current_riding', {}).get('name', {}).get('en', 'Unknown'),
+                            'ballot': ballot_value,
+                            'url': politician_url
+                        })
+                    except:
+                        # Skip if we can't get politician details
+                        continue
+
+                # Analyze party discipline
+                response_parts = [
+                    f"Party Discipline Analysis\n",
+                    f"Vote: {vote.get('description', {}).get('en', 'N/A')}\n",
+                    f"Date: {vote.get('date')}\n",
+                    f"Result: {vote.get('result')}\n\n",
+                ]
+
+                dissidents = []
+
+                for party, mps in sorted(party_ballots.items()):
+                    # Count votes by type
+                    vote_counts = defaultdict(int)
+                    for mp in mps:
+                        vote_counts[mp['ballot']] += 1
+
+                    # Determine party majority position
+                    majority_vote = max(vote_counts.items(), key=lambda x: x[1])[0]
+                    majority_count = vote_counts[majority_vote]
+                    total_count = len(mps)
+
+                    response_parts.append(f"{party} ({total_count} MPs):\n")
+                    response_parts.append(f"  Party Position: {majority_vote} ({majority_count}/{total_count})\n")
+
+                    # Find dissidents (those who voted differently)
+                    party_dissidents = [mp for mp in mps if mp['ballot'] != majority_vote]
+
+                    if party_dissidents:
+                        response_parts.append(f"  MPs who broke ranks ({len(party_dissidents)}):\n")
+                        for mp in party_dissidents:
+                            response_parts.append(f"    - {mp['name']} ({mp['riding']}): Voted {mp['ballot']}\n")
+                            dissidents.append({
+                                'party': party,
+                                'name': mp['name'],
+                                'riding': mp['riding'],
+                                'voted': mp['ballot'],
+                                'party_position': majority_vote
+                            })
+                    else:
+                        response_parts.append(f"  All MPs voted with party\n")
+
+                    response_parts.append("\n")
+
+                # Summary
+                if dissidents:
+                    response_parts.append(f"Summary: {len(dissidents)} MP(s) voted against their party's majority position\n")
+                else:
+                    response_parts.append("Summary: All MPs voted with their party\n")
+
+                return [TextContent(type="text", text="".join(response_parts))]
+
+            except KeyError as e:
+                logger.warning(f"Missing required parameter for analyze_party_discipline: {e}")
+                return [TextContent(type="text", text=f"Missing required parameter: {str(e)}")]
+            except Exception as e:
+                logger.exception(f"Unexpected error in analyze_party_discipline")
+                return [TextContent(type="text", text=f"Error analyzing party discipline: {sanitize_error_message(e)}")]
 
         # CanLII tools
         elif name == "search_cases":
