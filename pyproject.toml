@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fedmcp"
+version = "0.1.0"
+description = "MCP server for Canadian federal parliamentary and legal information"
+readme = "README.md"
+authors = [
+  {name = "Matt Dufresne", email = "matt@thoughtforge.com"}
+]
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+  "mcp>=1.0.0",
+  "requests>=2.31",
+  "beautifulsoup4>=4.12",
+  "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-asyncio>=0.21.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/matthewdufresne/FedMCP"
+Source = "https://github.com/matthewdufresne/FedMCP"
+
+[project.scripts]
+fedmcp = "fedmcp.server:main"

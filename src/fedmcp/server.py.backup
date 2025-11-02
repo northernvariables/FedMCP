@@ -1,0 +1,664 @@
+"""FedMCP Server - MCP server for Canadian federal parliamentary and legal information."""
+
+import os
+import asyncio
+from typing import Any
+from dataclasses import asdict
+from itertools import islice
+
+from mcp.server import Server
+from mcp.types import (
+    Tool,
+    TextContent,
+    ImageContent,
+    EmbeddedResource,
+)
+import mcp.server.stdio
+
+from .clients import (
+    OpenParliamentClient,
+    OurCommonsHansardClient,
+    LegisInfoClient,
+    CanLIIClient,
+)
+
+# Initialize clients
+op_client = OpenParliamentClient()
+hansard_client = OurCommonsHansardClient()
+legis_client = LegisInfoClient()
+
+# Initialize CanLII client if API key is available
+canlii_api_key = os.getenv("CANLII_API_KEY")
+canlii_client = CanLIIClient(api_key=canlii_api_key) if canlii_api_key else None
+
+# Create server instance
+app = Server("fedmcp")
+
+
+# Helper to run synchronous code in thread pool
+async def run_sync(func, *args, **kwargs):
+    """Run a synchronous function in a thread pool to avoid blocking the event loop."""
+    return await asyncio.to_thread(func, *args, **kwargs)
+
+
+@app.list_tools()
+async def list_tools() -> list[Tool]:
+    """List available MCP tools."""
+    tools = [
+        Tool(
+            name="search_debates",
+            description="Search Canadian House of Commons debates by keyword. Returns debate records with date, speaker, and content.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Keywords to search in debates",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results (1-50)",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="search_bills",
+            description="Search for Canadian bills by number (e.g., C-249) or keywords. Searches both LEGISinfo and OpenParliament.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Bill number (e.g., C-249) or keywords",
+                    },
+                    "session": {
+                        "type": "string",
+                        "description": "Parliamentary session (e.g., 45-1), required for specific bill lookup",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results (1-50)",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="search_hansard",
+            description="Search the latest House of Commons Hansard transcript for quotes or keywords. Returns matching speeches with full context.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Quote or keywords to search in Hansard",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of speeches to return (1-20)",
+                        "default": 5,
+                        "minimum": 1,
+                        "maximum": 20,
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="list_debates",
+            description="List recent House of Commons debates with pagination support.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of results to return",
+                        "default": 5,
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Offset for pagination",
+                        "default": 0,
+                        "minimum": 0,
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="get_bill",
+            description="Get detailed information for a specific bill from LEGISinfo.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session": {
+                        "type": "string",
+                        "description": "Parliamentary session (e.g., 45-1)",
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "Bill code (e.g., c-249, lowercase)",
+                    },
+                },
+                "required": ["session", "code"],
+            },
+        ),
+        Tool(
+            name="list_mps",
+            description="List current Members of Parliament from OpenParliament.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of results to return",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="list_votes",
+            description="List recent parliamentary votes from OpenParliament.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of results to return",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                },
+            },
+        ),
+    ]
+
+    # Add CanLII tools if client is available
+    if canlii_client:
+        tools.extend([
+            Tool(
+                name="search_cases",
+                description="Search Canadian case law via CanLII. Requires specifying a court/tribunal database ID (e.g., 'csc-scc' for Supreme Court).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "database_id": {
+                            "type": "string",
+                            "description": "Database ID (e.g., 'csc-scc' for Supreme Court, 'fca-caf' for Federal Court of Appeal)",
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "Keywords to search in case law",
+                        },
+                        "language": {
+                            "type": "string",
+                            "description": "Language code ('en' or 'fr')",
+                            "default": "en",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results (1-50)",
+                            "default": 10,
+                            "minimum": 1,
+                            "maximum": 50,
+                        },
+                        "published_after": {
+                            "type": "string",
+                            "description": "Filter by publish date (YYYY-MM-DD)",
+                        },
+                        "decision_date_after": {
+                            "type": "string",
+                            "description": "Filter by decision date (YYYY-MM-DD)",
+                        },
+                    },
+                    "required": ["database_id", "query"],
+                },
+            ),
+            Tool(
+                name="get_case",
+                description="Get detailed metadata for a specific case from CanLII.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "database_id": {
+                            "type": "string",
+                            "description": "Database ID (e.g., 'csc-scc')",
+                        },
+                        "case_id": {
+                            "type": "string",
+                            "description": "Case ID",
+                        },
+                        "language": {
+                            "type": "string",
+                            "description": "Language code ('en' or 'fr')",
+                            "default": "en",
+                        },
+                    },
+                    "required": ["database_id", "case_id"],
+                },
+            ),
+            Tool(
+                name="get_case_citations",
+                description="Get citation information for a case (cited cases, citing cases, or cited legislation).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "database_id": {
+                            "type": "string",
+                            "description": "Database ID (e.g., 'csc-scc')",
+                        },
+                        "case_id": {
+                            "type": "string",
+                            "description": "Case ID",
+                        },
+                        "citation_type": {
+                            "type": "string",
+                            "description": "Type of citations to retrieve",
+                            "enum": ["citedCases", "citingCases", "citedLegislations"],
+                            "default": "citingCases",
+                        },
+                    },
+                    "required": ["database_id", "case_id"],
+                },
+            ),
+            Tool(
+                name="search_legislation",
+                description="Browse Canadian federal and provincial legislation via CanLII.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "database_id": {
+                            "type": "string",
+                            "description": "Database ID (e.g., 'ca' for federal acts, 'car' for regulations)",
+                            "default": "ca",
+                        },
+                        "language": {
+                            "type": "string",
+                            "description": "Language code ('en' or 'fr')",
+                            "default": "en",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results",
+                            "default": 20,
+                            "minimum": 1,
+                            "maximum": 100,
+                        },
+                    },
+                },
+            ),
+        ])
+
+    return tools
+
+
+@app.call_tool()
+async def call_tool(name: str, arguments: Any) -> list[TextContent]:
+    """Handle tool calls.
+
+    Note: All client operations are synchronous (using requests library),
+    so we run them in a thread pool to avoid blocking the async event loop.
+    """
+
+    try:
+        if name == "search_debates":
+            query = arguments["query"]
+            limit = arguments.get("limit", 10)
+
+            def _search_debates():
+                debates = []
+                query_lower = query.lower()
+
+                # Use islice to cap max examined debates (3x limit for filtering)
+                # This prevents fetching unlimited pages when searching
+                max_to_examine = limit * 3
+                for debate in islice(op_client.list_debates(), max_to_examine):
+                    debate_text = " ".join([
+                        str(debate.get("content", {}).get("en", "")),
+                        str(debate.get("heading", {}).get("en", "")),
+                        str(debate.get("speaker", {}).get("name", "")),
+                    ]).lower()
+
+                    if query_lower in debate_text:
+                        debates.append({
+                            "date": debate.get("date"),
+                            "url": debate.get("url"),
+                            "speaker": debate.get("speaker", {}).get("name"),
+                            "content_preview": str(debate.get("content", {}).get("en", ""))[:300],
+                        })
+                        if len(debates) >= limit:
+                            break
+                return debates
+
+            debates = await run_sync(_search_debates)
+
+            return [TextContent(
+                type="text",
+                text=f"Found {len(debates)} debate(s) matching '{query}':\n\n" +
+                     "\n\n".join([
+                         f"Date: {d['date']}\nSpeaker: {d['speaker']}\nPreview: {d['content_preview']}...\nURL: {d['url']}"
+                         for d in debates
+                     ])
+            )]
+
+        elif name == "search_bills":
+            query = arguments["query"]
+            session = arguments.get("session")
+            limit = arguments.get("limit", 10)
+
+            query_upper = query.upper()
+            is_bill_number = query_upper.startswith(('C-', 'S-')) and len(query) < 10
+
+            bills = []
+
+            # Try specific bill lookup if bill number and session provided
+            if is_bill_number and session:
+                try:
+                    bill_code = query_upper.lower()
+                    bill_data = await run_sync(legis_client.get_bill, session, bill_code)
+
+                    if isinstance(bill_data, list) and bill_data:
+                        bill_info = bill_data[0]
+                        return [TextContent(
+                            type="text",
+                            text=f"Bill {bill_info.get('Number')}\n" +
+                                 f"Title: {bill_info.get('LongTitle') or bill_info.get('ShortTitle')}\n" +
+                                 f"Session: {session}\n" +
+                                 f"Source: LEGISinfo"
+                        )]
+                except Exception:
+                    pass  # Fall through to search
+
+            # Search in OpenParliament bills
+            def _search_bills():
+                query_lower = query.lower()
+                found_bills = []
+
+                # Use islice to cap max examined bills (2x limit for filtering)
+                # This prevents fetching unlimited pages when searching
+                max_to_examine = limit * 2
+                for bill in islice(op_client.list_bills(), max_to_examine):
+                    bill_text = " ".join([
+                        str(bill.get("number", "")),
+                        str(bill.get("name", {}).get("en", "")),
+                        str(bill.get("short_title", {}).get("en", "")),
+                    ]).lower()
+
+                    if query_lower in bill_text:
+                        found_bills.append({
+                            "number": bill.get("number"),
+                            "name": bill.get("name", {}).get("en"),
+                            "short_title": bill.get("short_title", {}).get("en"),
+                            "url": bill.get("url"),
+                        })
+                        if len(found_bills) >= limit:
+                            break
+                return found_bills
+
+            bills = await run_sync(_search_bills)
+
+            return [TextContent(
+                type="text",
+                text=f"Found {len(bills)} bill(s) matching '{query}':\n\n" +
+                     "\n\n".join([
+                         f"Number: {b['number']}\n" +
+                         f"Name: {(b['name'] or 'N/A')[:200]}{'...' if b['name'] and len(b['name']) > 200 else ''}\n" +
+                         f"Short Title: {(b['short_title'] or 'N/A')[:150]}{'...' if b['short_title'] and len(b['short_title']) > 150 else ''}\n" +
+                         f"URL: {b['url']}"
+                         for b in bills
+                     ])
+            )]
+
+        elif name == "search_hansard":
+            query = arguments["query"]
+            limit = arguments.get("limit", 5)
+
+            sitting = await run_sync(hansard_client.get_sitting, "latest/hansard", parse=True)
+
+            if not sitting or not sitting.sections:
+                return [TextContent(
+                    type="text",
+                    text=f"No Hansard data available or no matches found for '{query}'"
+                )]
+
+            matches = []
+            query_lower = query.lower()
+
+            for section in sitting.sections:
+                for speech in section.speeches:
+                    if len(matches) >= limit:
+                        break
+
+                    if speech.text and query_lower in speech.text.lower():
+                        text_lower = speech.text.lower()
+                        match_idx = text_lower.find(query_lower)
+
+                        start = max(0, match_idx - 200)
+                        end = min(len(speech.text), match_idx + len(query) + 200)
+                        context = speech.text[start:end]
+
+                        matches.append({
+                            "speaker": speech.speaker_name,
+                            "party": speech.party,
+                            "riding": speech.riding,
+                            "context": context,
+                        })
+
+            return [TextContent(
+                type="text",
+                text=f"Hansard Date: {sitting.date}\n" +
+                     f"Found {len(matches)} speech(es) matching '{query}':\n\n" +
+                     "\n\n---\n\n".join([
+                         f"Speaker: {m['speaker']} ({m['party']}, {m['riding']})\nContext: ...{m['context']}..."
+                         for m in matches
+                     ])
+            )]
+
+        elif name == "list_debates":
+            limit = arguments.get("limit", 5)
+            offset = arguments.get("offset", 0)
+
+            # Use islice to properly limit results (limit param only controls page size, not total)
+            debates = await run_sync(lambda: list(islice(op_client.list_debates(offset=offset), limit)))
+
+            return [TextContent(
+                type="text",
+                text=f"Recent debates (limit={limit}, offset={offset}):\n\n" +
+                     "\n\n".join([
+                         f"Date: {d.get('date')}\nSpeaker: {d.get('speaker', {}).get('name')}\n" +
+                         f"Heading: {d.get('heading', {}).get('en', 'N/A')}\nURL: {d.get('url')}"
+                         for d in debates
+                     ])
+            )]
+
+        elif name == "get_bill":
+            session = arguments["session"]
+            code = arguments["code"]
+
+            result = await run_sync(legis_client.get_bill, session, code)
+            if isinstance(result, list) and result:
+                bill = result[0]
+                return [TextContent(
+                    type="text",
+                    text=f"Bill {bill.get('Number')}\n" +
+                         f"Long Title: {bill.get('LongTitle')}\n" +
+                         f"Short Title: {bill.get('ShortTitle')}\n" +
+                         f"Session: {session}\n" +
+                         f"Sponsor: {bill.get('Sponsor', {}).get('Name', 'N/A')}"
+                )]
+
+            return [TextContent(type="text", text=f"Bill data: {result}")]
+
+        elif name == "list_mps":
+            limit = arguments.get("limit", 10)
+
+            # Use islice to properly limit results (limit param only controls page size, not total)
+            mps = await run_sync(lambda: list(islice(op_client.list_mps(), limit)))
+
+            return [TextContent(
+                type="text",
+                text=f"Current Members of Parliament (limit={limit}):\n\n" +
+                     "\n".join([
+                         f"- {mp.get('name')} ({mp.get('party', {}).get('short_name', {}).get('en', 'N/A')}) - {mp.get('riding', {}).get('name', {}).get('en', 'N/A')}"
+                         for mp in mps
+                     ])
+            )]
+
+        elif name == "list_votes":
+            limit = arguments.get("limit", 10)
+
+            # Run synchronous API call in thread pool to avoid blocking
+            # Use islice to properly limit results (limit param only controls page size, not total)
+            votes = await asyncio.to_thread(lambda: list(islice(op_client.list_votes(), limit)))
+
+            return [TextContent(
+                type="text",
+                text=f"Recent parliamentary votes (limit={limit}):\n\n" +
+                     "\n\n".join([
+                         f"Date: {v.get('date')}\nNumber: {v.get('number')}\n" +
+                         f"Description: {v.get('description', {}).get('en', 'N/A')[:200]}{'...' if len(v.get('description', {}).get('en', '')) > 200 else ''}\n" +
+                         f"Result: {v.get('result')}\nURL: {v.get('url')}"
+                         for v in votes
+                     ])
+            )]
+
+        # CanLII tools
+        elif name == "search_cases":
+            if not canlii_client:
+                return [TextContent(
+                    type="text",
+                    text="CanLII service unavailable. CANLII_API_KEY not configured."
+                )]
+
+            database_id = arguments["database_id"]
+            query = arguments["query"]
+            language = arguments.get("language", "en")
+            limit = arguments.get("limit", 10)
+            published_after = arguments.get("published_after")
+            decision_date_after = arguments.get("decision_date_after")
+
+            cases = await run_sync(
+                canlii_client.search_cases_by_keyword,
+                database_id=database_id,
+                query=query,
+                language=language,
+                limit=limit,
+                published_after=published_after,
+                decision_date_after=decision_date_after,
+            )
+
+            return [TextContent(
+                type="text",
+                text=f"Found {len(cases)} case(s) in {database_id} matching '{query}':\n\n" +
+                     "\n\n".join([
+                         f"Title: {c.get('title', 'N/A')}\n" +
+                         f"Citation: {c.get('citation', 'N/A')}\n" +
+                         f"Date: {c.get('decisionDate', 'N/A')}\n" +
+                         f"Docket: {c.get('docketNumber', 'N/A')}"
+                         for c in cases
+                     ])
+            )]
+
+        elif name == "get_case":
+            if not canlii_client:
+                return [TextContent(
+                    type="text",
+                    text="CanLII service unavailable. CANLII_API_KEY not configured."
+                )]
+
+            database_id = arguments["database_id"]
+            case_id = arguments["case_id"]
+            language = arguments.get("language", "en")
+
+            case = await run_sync(canlii_client.get_case, database_id, case_id, language=language)
+
+            return [TextContent(
+                type="text",
+                text=f"Case: {case.get('title', 'N/A')}\n" +
+                     f"Citation: {case.get('citation', 'N/A')}\n" +
+                     f"Docket: {case.get('docketNumber', 'N/A')}\n" +
+                     f"Decision Date: {case.get('decisionDate', 'N/A')}\n" +
+                     f"Keywords: {', '.join(case.get('keywords', []))}"
+            )]
+
+        elif name == "get_case_citations":
+            if not canlii_client:
+                return [TextContent(
+                    type="text",
+                    text="CanLII service unavailable. CANLII_API_KEY not configured."
+                )]
+
+            database_id = arguments["database_id"]
+            case_id = arguments["case_id"]
+            citation_type = arguments.get("citation_type", "citingCases")
+
+            if citation_type == "citedCases":
+                result = await run_sync(canlii_client.get_cited_cases, database_id, case_id)
+            elif citation_type == "citingCases":
+                result = await run_sync(canlii_client.get_citing_cases, database_id, case_id)
+            else:  # citedLegislations
+                result = await run_sync(canlii_client.get_cited_legislations, database_id, case_id)
+
+            return [TextContent(
+                type="text",
+                text=f"Citations ({citation_type}) for {database_id}/{case_id}:\n\n{result}"
+            )]
+
+        elif name == "search_legislation":
+            if not canlii_client:
+                return [TextContent(
+                    type="text",
+                    text="CanLII service unavailable. CANLII_API_KEY not configured."
+                )]
+
+            database_id = arguments.get("database_id", "ca")
+            language = arguments.get("language", "en")
+            limit = arguments.get("limit", 20)
+
+            result = await run_sync(canlii_client.browse_legislation, database_id, language=language)
+
+            if "legislations" in result:
+                legislations = result["legislations"][:limit]
+                return [TextContent(
+                    type="text",
+                    text=f"Legislation in {database_id}:\n\n" +
+                         "\n".join([
+                             f"- {leg.get('title', 'N/A')}"
+                             for leg in legislations
+                         ])
+                )]
+
+            return [TextContent(type="text", text=f"Legislation data: {result}")]
+
+        else:
+            return [TextContent(type="text", text=f"Unknown tool: {name}")]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error executing {name}: {str(e)}")]
+
+
+async def main():
+    """Run the MCP server."""
+    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+        await app.run(
+            read_stream,
+            write_stream,
+            app.create_initialization_options()
+        )
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
