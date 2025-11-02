@@ -424,6 +424,66 @@ async def list_tools() -> list[Tool]:
                 "required": ["vote_url"],
             },
         ),
+        Tool(
+            name="get_bill_legislative_progress",
+            description="Get detailed legislative progress and status for a Canadian bill. Shows current stage, completed stages, timeline, and next steps.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "bill_number": {
+                        "type": "string",
+                        "description": "Bill number (e.g., 'C-2', 'S-222')",
+                    },
+                    "session": {
+                        "type": "string",
+                        "description": "Parliamentary session (e.g., '45-1'). If not provided, will search recent sessions.",
+                    },
+                },
+                "required": ["bill_number"],
+            },
+        ),
+        Tool(
+            name="analyze_mp_voting_participation",
+            description="Analyze an MP's voting participation and attendance. Shows participation rate, recent votes, and patterns of abstention or absence.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "politician_url": {
+                        "type": "string",
+                        "description": "Politician URL (e.g., '/politicians/pierre-poilievre/'). Use search_politician first if needed.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of recent votes to analyze (1-100)",
+                        "default": 50,
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                },
+                "required": ["politician_url"],
+            },
+        ),
+        Tool(
+            name="search_topic_across_sources",
+            description="Search for a topic or keyword across all data sources (debates, bills, Hansard, votes). Provides comprehensive coverage of parliamentary discussion on a topic.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string",
+                        "description": "Topic or keywords to search across all sources",
+                    },
+                    "limit_per_source": {
+                        "type": "integer",
+                        "description": "Maximum results per source (1-20)",
+                        "default": 5,
+                        "minimum": 1,
+                        "maximum": 20,
+                    },
+                },
+                "required": ["topic"],
+            },
+        ),
     ]
 
     # Add CanLII tools if client is available
@@ -1373,6 +1433,237 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             except Exception as e:
                 logger.exception(f"Unexpected error in analyze_party_discipline")
                 return [TextContent(type="text", text=f"Error analyzing party discipline: {sanitize_error_message(e)}")]
+
+        # Phase 4 tools
+        elif name == "get_bill_legislative_progress":
+            try:
+                bill_number = arguments["bill_number"]
+                session = arguments.get("session", "45-1")  # Default to current session
+                logger.info(f"get_bill_legislative_progress called with bill_number={bill_number}, session={session}")
+
+                # Get bill details from LEGISinfo
+                bills = await run_sync(legis_client.get_bill, session, bill_number)
+
+                if not bills or not isinstance(bills, list) or len(bills) == 0:
+                    return [TextContent(
+                        type="text",
+                        text=f"No bill found for {bill_number} in session {session}. Try a different session or check the bill number."
+                    )]
+
+                bill = bills[0]  # Get first result
+
+                response_parts = [
+                    f"Legislative Progress for Bill {bill_number}\n",
+                    f"=" * 50, "\n\n",
+                    f"Title: {bill.get('LongTitle', 'N/A')}\n",
+                    f"Short Title: {bill.get('ShortTitle', 'N/A')}\n",
+                    f"Session: {bill.get('ParliamentNumber')}-{bill.get('SessionNumber')}\n",
+                    f"Bill Type: {bill.get('BillDocumentTypeName', 'N/A')}\n",
+                    f"Originating Chamber: {bill.get('OriginatingChamberName', 'N/A')}\n\n",
+                    f"CURRENT STATUS\n",
+                    f"-" * 50, "\n",
+                    f"Status: {bill.get('StatusName', 'N/A')}\n",
+                    f"Current Stage: {bill.get('OngoingStageName', 'N/A')}\n\n",
+                    f"COMPLETED STAGES\n",
+                    f"-" * 50, "\n",
+                    f"Latest Completed Stage: {bill.get('LatestCompletedMajorStageName', 'N/A')}\n",
+                    f"Chamber: {bill.get('LatestCompletedMajorStageChamberName', 'N/A')}\n",
+                ]
+
+                if bill.get('LatestCompletedBillStageDateTime'):
+                    response_parts.append(f"Completed: {bill.get('LatestCompletedBillStageDateTime')}\n")
+
+                # Sponsor information
+                response_parts.append(f"\nSPONSOR\n")
+                response_parts.append(f"-" * 50 + "\n")
+                sponsor_name = bill.get('SponsorPersonShortHonorific', '')
+                if sponsor_name:
+                    sponsor_affiliation = bill.get('SponsorPersonLatestPartyName', '')
+                    response_parts.append(f"{sponsor_name}")
+                    if sponsor_affiliation:
+                        response_parts.append(f" ({sponsor_affiliation})")
+                    response_parts.append("\n")
+                else:
+                    response_parts.append("N/A\n")
+
+                # Additional information
+                is_govt_bill = bill.get('IsGovernmentBill', False)
+                response_parts.append(f"\nGovernment Bill: {'Yes' if is_govt_bill else 'No'}\n")
+
+                return [TextContent(type="text", text="".join(response_parts))]
+
+            except KeyError as e:
+                logger.warning(f"Missing required parameter for get_bill_legislative_progress: {e}")
+                return [TextContent(type="text", text=f"Missing required parameter: {str(e)}")]
+            except Exception as e:
+                logger.exception(f"Unexpected error in get_bill_legislative_progress")
+                return [TextContent(type="text", text=f"Error getting bill progress: {sanitize_error_message(e)}")]
+
+        elif name == "analyze_mp_voting_participation":
+            try:
+                politician_url = arguments["politician_url"]
+                limit = validate_limit(arguments.get("limit"), default=50, max_val=100)
+                logger.info(f"analyze_mp_voting_participation called with politician_url={politician_url}, limit={limit}")
+
+                # Get politician details
+                politician = await run_sync(op_client.get_politician, politician_url)
+
+                # Get voting history
+                ballots = await run_sync(op_client.get_politician_ballots, politician_url, limit)
+
+                if not ballots:
+                    return [TextContent(
+                        type="text",
+                        text=f"No voting history found for {politician.get('name', 'this politician')}."
+                    )]
+
+                # Analyze participation
+                from collections import defaultdict
+                vote_counts = defaultdict(int)
+                total_votes = len(ballots)
+
+                for ballot in ballots:
+                    ballot_value = ballot.get('ballot', 'Unknown')
+                    vote_counts[ballot_value] += 1
+
+                # Calculate participation rate (Yea + Nay = participated)
+                participated = vote_counts.get('Yea', 0) + vote_counts.get('Nay', 0)
+                participation_rate = (participated / total_votes * 100) if total_votes > 0 else 0
+
+                response_parts = [
+                    f"Voting Participation Analysis\n",
+                    f"=" * 50, "\n\n",
+                    f"MP: {politician.get('name', 'N/A')}\n",
+                    f"Party: {politician.get('current_party', {}).get('short_name', {}).get('en', 'N/A')}\n",
+                    f"Riding: {politician.get('current_riding', {}).get('name', {}).get('en', 'N/A')}\n\n",
+                    f"PARTICIPATION SUMMARY (last {total_votes} votes)\n",
+                    f"-" * 50, "\n",
+                    f"Participation Rate: {participation_rate:.1f}%\n",
+                    f"Total Votes Analyzed: {total_votes}\n\n",
+                    f"VOTE BREAKDOWN\n",
+                    f"-" * 50, "\n",
+                ]
+
+                for vote_type, count in sorted(vote_counts.items(), key=lambda x: x[1], reverse=True):
+                    percentage = (count / total_votes * 100) if total_votes > 0 else 0
+                    response_parts.append(f"  {vote_type}: {count} ({percentage:.1f}%)\n")
+
+                # Show recent votes
+                response_parts.append(f"\nRECENT VOTES (last 10)\n")
+                response_parts.append(f"-" * 50 + "\n")
+
+                for i, ballot in enumerate(islice(ballots, 10)):
+                    vote_info = ballot.get('vote', {})
+                    vote_desc = vote_info.get('description', {}).get('en', 'N/A')
+                    vote_date = vote_info.get('date', 'N/A')
+                    ballot_value = ballot.get('ballot', 'N/A')
+                    response_parts.append(f"{i+1}. {vote_desc[:60]}... ({vote_date}): {ballot_value}\n")
+
+                return [TextContent(type="text", text="".join(response_parts))]
+
+            except KeyError as e:
+                logger.warning(f"Missing required parameter for analyze_mp_voting_participation: {e}")
+                return [TextContent(type="text", text=f"Missing required parameter: {str(e)}")]
+            except Exception as e:
+                logger.exception(f"Unexpected error in analyze_mp_voting_participation")
+                return [TextContent(type="text", text=f"Error analyzing voting participation: {sanitize_error_message(e)}")]
+
+        elif name == "search_topic_across_sources":
+            try:
+                topic = arguments["topic"]
+                limit = validate_limit(arguments.get("limit_per_source"), default=5, max_val=20)
+                logger.info(f"search_topic_across_sources called with topic='{topic}', limit={limit}")
+
+                response_parts = [
+                    f"Multi-Source Search Results for: '{topic}'\n",
+                    f"=" * 50, "\n\n",
+                ]
+
+                # Search bills
+                response_parts.append(f"BILLS\n")
+                response_parts.append(f"-" * 50 + "\n")
+                try:
+                    bills = list(islice(await run_sync(op_client.list_bills, q=topic), limit))
+                    if bills:
+                        for i, bill in enumerate(bills, 1):
+                            response_parts.append(f"{i}. {bill.get('number', 'N/A')} - {bill.get('name', {}).get('en', 'N/A')[:80]}\n")
+                    else:
+                        response_parts.append("No bills found\n")
+                except Exception as e:
+                    response_parts.append(f"Error searching bills: {str(e)}\n")
+                response_parts.append("\n")
+
+                # Search debates
+                response_parts.append(f"DEBATES\n")
+                response_parts.append(f"-" * 50 + "\n")
+                try:
+                    debates = list(islice(await run_sync(op_client.list_debates, q=topic), limit))
+                    if debates:
+                        for i, debate in enumerate(debates, 1):
+                            speaker = debate.get('attribution', 'Unknown')
+                            content = debate.get('text', {}).get('en', '')[:100]
+                            date = debate.get('date', 'N/A')
+                            response_parts.append(f"{i}. {speaker} ({date}): {content}...\n")
+                    else:
+                        response_parts.append("No debates found\n")
+                except Exception as e:
+                    response_parts.append(f"Error searching debates: {str(e)}\n")
+                response_parts.append("\n")
+
+                # Search votes
+                response_parts.append(f"VOTES\n")
+                response_parts.append(f"-" * 50 + "\n")
+                try:
+                    votes = list(islice(await run_sync(op_client.list_votes, q=topic), limit))
+                    if votes:
+                        for i, vote in enumerate(votes, 1):
+                            desc = vote.get('description', {}).get('en', 'N/A')[:80]
+                            date = vote.get('date', 'N/A')
+                            result = vote.get('result', 'N/A')
+                            response_parts.append(f"{i}. {desc} ({date}): {result}\n")
+                    else:
+                        response_parts.append("No votes found\n")
+                except Exception as e:
+                    response_parts.append(f"Error searching votes: {str(e)}\n")
+                response_parts.append("\n")
+
+                # Search Hansard
+                response_parts.append(f"HANSARD\n")
+                response_parts.append(f"-" * 50 + "\n")
+                try:
+                    sitting = await run_sync(hansard_client.get_latest_sitting)
+                    if sitting and sitting.sections:
+                        matches = []
+                        for section in sitting.sections:
+                            for speech in section.speeches:
+                                if topic.lower() in speech.content.lower():
+                                    matches.append({
+                                        'speaker': speech.person_speaking,
+                                        'content': speech.content[:100]
+                                    })
+                                    if len(matches) >= limit:
+                                        break
+                            if len(matches) >= limit:
+                                break
+
+                        if matches:
+                            for i, match in enumerate(matches, 1):
+                                response_parts.append(f"{i}. {match['speaker']}: {match['content']}...\n")
+                        else:
+                            response_parts.append("No Hansard mentions found\n")
+                    else:
+                        response_parts.append("Hansard data unavailable\n")
+                except Exception as e:
+                    response_parts.append(f"Error searching Hansard: {str(e)}\n")
+
+                return [TextContent(type="text", text="".join(response_parts))]
+
+            except KeyError as e:
+                logger.warning(f"Missing required parameter for search_topic_across_sources: {e}")
+                return [TextContent(type="text", text=f"Missing required parameter: {str(e)}")]
+            except Exception as e:
+                logger.exception(f"Unexpected error in search_topic_across_sources")
+                return [TextContent(type="text", text=f"Error searching across sources: {sanitize_error_message(e)}")]
 
         # CanLII tools
         elif name == "search_cases":
