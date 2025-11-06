@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Apply Canada dark theme colors from design system */
+  :root {
+    --background: #0f172a;
+    --foreground: #f1f5f9;
+  }
+
+  body {
+    @apply bg-bg-primary text-text-primary antialiased;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-bg-secondary;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-bg-elevated rounded;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-border-emphasis;
+  }
+}
+
+@layer components {
+  /* Page container */
+  .page-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+  }
+
+  /* Section heading */
+  .section-heading {
+    @apply text-2xl font-bold text-text-primary mb-6;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-4 border-border-subtle border-t-accent-red;
+  }
+
+  /* Link styling */
+  .link {
+    @apply text-accent-red hover:text-accent-red-hover underline underline-offset-4 transition-colors;
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "name": "@canadagpt/frontend",
+  "version": "1.0.0",
+  "description": "CanadaGPT - Canadian Government Accountability Platform",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "codegen": "graphql-codegen --config codegen.yml"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@apollo/client": "^3.9.0",
+    "@canadagpt/design-system": "workspace:*",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/supabase-js": "^2.79.0",
+    "ai": "^5.0.87",
+    "clsx": "^2.1.0",
+    "critters": "^0.0.25",
+    "date-fns": "^3.0.0",
+    "framer-motion": "^12.23.24",
+    "graphql": "^16.8.1",
+    "lucide-react": "^0.300.0",
+    "next": "^15.0.0",
+    "openai": "^6.8.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.3.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^2.2.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@graphql-codegen/cli": "^6.0.1",
+    "@graphql-codegen/typescript": "^5.0.2",
+    "@graphql-codegen/typescript-operations": "^5.0.2",
+    "@graphql-codegen/typescript-react-apollo": "^4.3.3",
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^15.0.0",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
