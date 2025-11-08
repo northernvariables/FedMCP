@@ -320,7 +320,7 @@ export default function DebatePage() {
                 size="sm"
               />
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={handleShare}
               >
@@ -329,7 +329,7 @@ export default function DebatePage() {
               </Button>
               {document.xml_source_url && (
                 <a href={document.xml_source_url} target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" size="sm">
+                  <Button variant="secondary" size="sm">
                     <ExternalLink className="h-4 w-4 mr-2" />
                     XML Source
                   </Button>
@@ -417,7 +417,7 @@ export default function DebatePage() {
             {(searchQuery || selectedSpeaker || selectedTopic) && (
               <div className="flex justify-end">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => {
                     setSearchQuery('');
