@@ -148,6 +148,7 @@
       "orderPaper": "Order Paper",
       "royalAssent": "Royal Assent",
       "failedLegislation": "Failed Legislation",
+      "privateMembersBills": "Private Members' Bills",
       "reset": "Reset All Filters"
     },
     "types": {
@@ -469,5 +470,206 @@
     "forbidden": "You don't have permission to access this resource.",
     "serverError": "Server error. Please try again later.",
     "validation": "Please check your input and try again."
+  },
+  "share": {
+    "button": "Share",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied!",
+    "email": "Email",
+    "print": "Print",
+    "shareVia": "Share via",
+    "twitter": "X (Twitter)",
+    "facebook": "Facebook",
+    "linkedin": "LinkedIn",
+    "reddit": "Reddit",
+    "ehSocial": "EH! Social",
+    "threads": "Threads"
+  },
+  "Privacy": {
+    "title": "Privacy Policy",
+    "description": "Learn how CanadaGPT collects, uses, and protects your personal information",
+    "lastUpdated": "Last Updated:",
+    "introduction": {
+      "title": "Introduction",
+      "content": "CanadaGPT ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our website and services at https://canadagpt.ca. By using CanadaGPT, you agree to the collection and use of information in accordance with this policy."
+    },
+    "collect": {
+      "title": "Information We Collect",
+      "account": {
+        "title": "1.1 Account Information",
+        "content": "When you create an account using OAuth authentication providers (Google, GitHub, Facebook, LinkedIn), we collect:",
+        "items": {
+          "name": "Your name (as provided by the OAuth provider)",
+          "email": "Your email address",
+          "profile": "Profile photo (optional)",
+          "provider": "Authentication provider ID"
+        }
+      },
+      "userContent": {
+        "title": "1.2 User-Generated Content",
+        "items": {
+          "posts": "Forum posts and topics you create",
+          "comments": "Comments and replies to forum discussions",
+          "votes": "Upvotes and downvotes on forum content"
+        }
+      },
+      "usage": {
+        "title": "1.3 Usage Data",
+        "items": {
+          "pages": "Pages you visit and features you use",
+          "searches": "Search queries and filters applied",
+          "browser": "Browser type and device information",
+          "ip": "IP address and approximate geographic location"
+        }
+      }
+    },
+    "use": {
+      "title": "How We Use Your Information",
+      "items": {
+        "authentication": "Authenticate your identity and manage your account",
+        "forum": "Enable you to participate in forum discussions",
+        "personalization": "Personalize your experience and remember your preferences",
+        "analytics": "Analyze usage patterns to improve our services",
+        "communication": "Send important updates about service changes or new features",
+        "security": "Detect and prevent fraud, abuse, and security incidents"
+      }
+    },
+    "publicData": {
+      "title": "Public Parliamentary Data",
+      "content": "CanadaGPT displays publicly available Canadian government data from official sources. This data is NOT collected by us and remains the property of the Government of Canada. Sources include:",
+      "sources": {
+        "parliament": "Parliament of Canada (openparliament.ca) - Hansard debates and speeches",
+        "legisinfo": "LEGISinfo - Bill tracking and legislative information",
+        "lobbying": "Office of the Commissioner of Lobbying - Lobbying registry and communications",
+        "canlii": "CanLII - Case law and legal documents (optional, user-initiated)"
+      }
+    },
+    "security": {
+      "title": "Data Storage and Security",
+      "content": "We implement industry-standard security measures to protect your personal information:",
+      "infrastructure": {
+        "title": "Infrastructure",
+        "items": {
+          "auth": "Authentication: Supabase (managed PostgreSQL with encryption at rest)",
+          "hosting": "Hosting: Google Cloud Platform (GCP) with HTTPS/TLS encryption",
+          "database": "Database: Neo4j graph database for parliamentary data (separate from user data)",
+          "encryption": "All data transfers use TLS 1.2+ encryption"
+        }
+      },
+      "measures": {
+        "title": "Security Measures",
+        "items": {
+          "https": "HTTPS-only access (enforced at CDN and application levels)",
+          "oauth": "OAuth 2.0 authentication (no passwords stored by CanadaGPT)",
+          "isolation": "User data isolated from public parliamentary data",
+          "monitoring": "Regular security monitoring and logging"
+        }
+      }
+    },
+    "thirdParty": {
+      "title": "Third-Party Services",
+      "content": "We use the following third-party services that may collect information used to identify you:",
+      "privacyPolicy": "Privacy Policy",
+      "services": {
+        "supabase": {
+          "name": "Supabase",
+          "description": "Authentication and database hosting"
+        },
+        "google": {
+          "name": "Google Cloud Platform",
+          "description": "Cloud hosting and infrastructure"
+        },
+        "oauth": {
+          "name": "OAuth Providers",
+          "description": "Google, GitHub, Facebook, and LinkedIn for authentication"
+        }
+      }
+    },
+    "rights": {
+      "title": "Your Privacy Rights",
+      "items": {
+        "access": {
+          "title": "Access",
+          "description": "View your account information and forum posts"
+        },
+        "correction": {
+          "title": "Correction",
+          "description": "Update your profile information"
+        },
+        "deletion": {
+          "title": "Deletion",
+          "description": "Request account deletion (forum posts may be anonymized but retained for historical context)"
+        },
+        "export": {
+          "title": "Data Export",
+          "description": "Request a copy of your personal data"
+        },
+        "optOut": {
+          "title": "Opt-Out",
+          "description": "Withdraw consent for non-essential data processing"
+        }
+      },
+      "contact": "To exercise these rights, contact us at privacy@canadagpt.ca"
+    },
+    "cookies": {
+      "title": "Cookies and Tracking",
+      "content": "We use cookies and similar tracking technologies to:",
+      "types": {
+        "essential": {
+          "title": "Essential Cookies",
+          "description": "Required for authentication and basic site functionality"
+        },
+        "preferences": {
+          "title": "Preferences",
+          "description": "Remember your language preference and UI settings"
+        },
+        "analytics": {
+          "title": "Analytics",
+          "description": "Understand how visitors use our site (anonymized data only)"
+        }
+      }
+    },
+    "retention": {
+      "title": "Data Retention",
+      "items": {
+        "accounts": {
+          "title": "Account Data",
+          "description": "Retained until you request deletion"
+        },
+        "forumPosts": {
+          "title": "Forum Posts",
+          "description": "Retained indefinitely for historical record; may be anonymized upon account deletion"
+        },
+        "logs": {
+          "title": "Server Logs",
+          "description": "Retained for 90 days for security and debugging purposes"
+        }
+      }
+    },
+    "children": {
+      "title": "Children's Privacy",
+      "content": "CanadaGPT is not directed to children under 13. We do not knowingly collect personal information from children. If you believe we have collected information from a child, please contact us immediately."
+    },
+    "international": {
+      "title": "International Users",
+      "content": "Our services are hosted in Canada and the United States (Google Cloud Platform). By using CanadaGPT, you consent to the transfer of your information to Canada and the United States. We comply with applicable Canadian privacy laws (PIPEDA) and provide protections equivalent to GDPR and CCPA standards."
+    },
+    "changes": {
+      "title": "Changes to This Privacy Policy",
+      "content": "We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the \"Last Updated\" date. You are advised to review this Privacy Policy periodically for any changes."
+    },
+    "contact": {
+      "title": "Contact Us",
+      "content": "If you have questions or concerns about this Privacy Policy, please contact us:"
+    },
+    "compliance": {
+      "title": "Legal Compliance",
+      "content": "CanadaGPT complies with:",
+      "laws": {
+        "pipeda": "Personal Information Protection and Electronic Documents Act (PIPEDA) - Canada",
+        "gdpr": "General Data Protection Regulation (GDPR) - European Union",
+        "ccpa": "California Consumer Privacy Act (CCPA) - United States"
+      }
+    }
   }
 }
