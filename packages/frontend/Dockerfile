@@ -50,6 +50,7 @@ WORKDIR /app/packages/design-system
 RUN pnpm build
 
 # Copy frontend package
+WORKDIR /app
 COPY packages/frontend ./packages/frontend
 
 # Set working directory to frontend
