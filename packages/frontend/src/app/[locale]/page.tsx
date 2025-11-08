@@ -53,7 +53,7 @@ export default function Home() {
                   </Button>
                 </Link>
                 <Link href="/mps">
-                  <Button variant="secondary" size={64} className="w-full sm:w-auto">
+                  <Button variant="secondary" size="lg" className="w-full sm:w-auto">
                     {t('hero.cta.secondary')}
                   </Button>
                 </Link>
