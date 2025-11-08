@@ -84,7 +84,7 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Copy public assets
-COPY --from=builder /app/packages/frontend/public ./public
+COPY --from=builder /app/packages/frontend/public ./packages/frontend/public
 
 # Copy standalone output from Next.js build
 COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/standalone ./
