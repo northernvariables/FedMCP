@@ -41,7 +41,7 @@ lerna-debug.log*
 # Dependencies
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
+# pnpm-lock.yaml - needed for Docker builds
 
 # Build outputs
 .next/
