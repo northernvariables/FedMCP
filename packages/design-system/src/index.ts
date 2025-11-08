@@ -7,7 +7,7 @@
  */
 
 // Utilities
-export { cn, formatCAD, formatDate, truncate, pluralize } from './lib/utils';
+export { cn, formatCAD, formatDate, truncate, pluralize } from './utils/utils';
 
 // Icons
 export { MapleLeafIcon, ParliamentSilhouette } from './icons/MapleLeafIcon';
