@@ -140,3 +140,12 @@ docs/_build/
 docs/.doctrees/
 site/
 env-vars.yaml
+
+# Database dumps and backups
+*.sql
+*.sql.bz2
+*.sql.gz
+*.dump
+*.dump.gz
+backups/
+openparliament.public.sql.bz2
