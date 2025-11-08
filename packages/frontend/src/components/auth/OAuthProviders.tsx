@@ -45,7 +45,7 @@ export function OAuthProviders({ onError }: OAuthProvidersProps) {
   return (
     <div className="space-y-3">
       <AuthButton
-        variant="secondary"
+        variant="outline"
         onClick={() => handleOAuth('google')}
         loading={loadingProvider === 'google'}
         disabled={loadingProvider !== null}
@@ -74,7 +74,7 @@ export function OAuthProviders({ onError }: OAuthProvidersProps) {
       </AuthButton>
 
       <AuthButton
-        variant="secondary"
+        variant="outline"
         onClick={() => handleOAuth('github')}
         loading={loadingProvider === 'github'}
         disabled={loadingProvider !== null}
@@ -92,7 +92,7 @@ export function OAuthProviders({ onError }: OAuthProvidersProps) {
       </AuthButton>
 
       <AuthButton
-        variant="secondary"
+        variant="outline"
         onClick={() => handleOAuth('facebook')}
         loading={loadingProvider === 'facebook'}
         disabled={loadingProvider !== null}
@@ -106,7 +106,7 @@ export function OAuthProviders({ onError }: OAuthProvidersProps) {
       </AuthButton>
 
       <AuthButton
-        variant="secondary"
+        variant="outline"
         onClick={() => handleOAuth('linkedin_oidc')}
         loading={loadingProvider === 'linkedin_oidc'}
         disabled={loadingProvider !== null}
