@@ -30,14 +30,18 @@ function getSupabaseClient() {
   );
 }
 
-// AI Provider clients (server-side)
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// AI Provider clients (server-side) - lazy initialization to avoid build-time errors
+function getAnthropicClient() {
+  return new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
+}
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 // Pricing constants (per 1M tokens)
 const CLAUDE_SONNET_INPUT_PRICE = 3.00; // $3 per 1M input tokens
@@ -254,7 +258,7 @@ export async function POST(request: Request) {
       usedBYOKey = true;
     } else {
       // Use platform's Anthropic key
-      providerClient = anthropic;
+      providerClient = getAnthropicClient();
       provider = 'anthropic';
     }
 
