@@ -489,7 +489,7 @@ export default function SettingsPage() {
                       </h3>
                       <p className="text-gray-600 mt-1">
                         {profile.subscription_tier === 'FREE' && '10 queries per day'}
-                        {profile.subscription_tier === 'BASIC' && '200 queries per month - $9.99/month'}
+                        {profile.subscription_tier === 'BASIC' && '200 queries per month - $6.99/month'}
                         {profile.subscription_tier === 'PRO' && '1000 queries per month + MCP access - $29.99/month'}
                       </p>
                     </div>
