@@ -4,7 +4,7 @@
 
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import { useQuery } from '@apollo/client';
 import { useLocale } from 'next-intl';
 import { Header } from '@/components/Header';
@@ -218,7 +218,7 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
           const MemberCard = ({ member, large = false }: { member: any; large?: boolean }) => {
             // Get photo URL from GCS or fallback to ID-based construction
             const photoUrl = getMPPhotoUrl(member);
-            const [imageError, setImageError] = React.useState(false);
+            const [imageError, setImageError] = useState(false);
 
             return (
               <Link
