@@ -14,8 +14,6 @@ import Credentials from 'next-auth/providers/credentials';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { encryptToken } from '@/lib/encryption';
 
-const supabaseAdmin = getSupabaseAdmin();
-
 export const {auth, handlers, signIn, signOut } = NextAuth({
   providers: [
     Google({
@@ -50,7 +48,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         }
 
         // Check if user exists in database
-        const { data: profile, error } = await (supabaseAdmin
+        const { data: profile, error } = await (getSupabaseAdmin()
           .from('user_profiles') as any)
           .select('*')
           .eq('email', credentials.email as string)
@@ -61,7 +59,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         }
 
         // Use Supabase auth for password verification
-        const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
+        const { data: authData, error: authError } = await getSupabaseAdmin().auth.signInWithPassword({
           email: credentials.email as string,
           password: credentials.password as string,
         });
@@ -88,7 +86,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
       // Initial sign in
       if (user) {
         // Create or update profile
-        const { data: existingProfile } = await (supabaseAdmin
+        const { data: existingProfile } = await (getSupabaseAdmin()
           .from('user_profiles') as any)
           .select('*')
           .eq('email', user.email!)
@@ -98,7 +96,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
 
         if (!existingProfile) {
           // Check if auth.users already has a user with this email
-          const { data: { users: existingAuthUsers } } = await supabaseAdmin.auth.admin.listUsers();
+          const { data: { users: existingAuthUsers } } = await getSupabaseAdmin().auth.admin.listUsers();
           const existingAuthUser = existingAuthUsers?.find(u => u.email === user.email);
 
           let authUserId: string;
@@ -109,7 +107,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
             console.log(`Using existing auth user ID ${authUserId} for ${user.email}`);
           } else {
             // Create user in Supabase Auth first
-            const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            const { data: authUser, error: authError } = await getSupabaseAdmin().auth.admin.createUser({
               email: user.email!,
               email_confirm: true, // Auto-confirm since OAuth provider verified email
               user_metadata: {
@@ -129,7 +127,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
           }
 
           // Create record in users table
-          const { error: usersError } = await (supabaseAdmin
+          const { error: usersError } = await (getSupabaseAdmin()
             .from('users') as any)
             .insert({
               id: authUserId,
@@ -144,7 +142,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
           }
 
           // Create new profile with auth user ID
-          const { data: newProfile, error } = await (supabaseAdmin
+          const { data: newProfile, error } = await (getSupabaseAdmin()
             .from('user_profiles') as any)
             .insert({
               id: authUserId,
@@ -165,7 +163,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
           userId = newProfile.id;
         } else {
           // For existing profiles, ensure we use the auth.users ID if it exists
-          const { data: { users: existingAuthUsers } } = await supabaseAdmin.auth.admin.listUsers();
+          const { data: { users: existingAuthUsers } } = await getSupabaseAdmin().auth.admin.listUsers();
           const existingAuthUser = existingAuthUsers?.find(u => u.email === user.email);
 
           if (existingAuthUser && existingAuthUser.id !== existingProfile.id) {
@@ -176,14 +174,14 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
           }
 
           // Ensure users table record exists
-          const { data: existingUser } = await (supabaseAdmin
+          const { data: existingUser } = await (getSupabaseAdmin()
             .from('users') as any)
             .select('id')
             .eq('id', userId)
             .maybeSingle();
 
           if (!existingUser) {
-            const { error: usersError } = await (supabaseAdmin
+            const { error: usersError } = await (getSupabaseAdmin()
               .from('users') as any)
               .insert({
                 id: userId,
@@ -196,7 +194,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
           }
 
           // Update existing profile with latest OAuth info
-          await (supabaseAdmin
+          await (getSupabaseAdmin()
             .from('user_profiles') as any)
             .update({
               full_name: user.name || existingProfile.full_name,
@@ -210,7 +208,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         token.id = userId;
 
         // Store subscription info and dates in token
-        const { data: profile } = await (supabaseAdmin
+        const { data: profile } = await (getSupabaseAdmin()
           .from('user_profiles') as any)
           .select('subscription_tier, monthly_usage, created_at, usage_reset_date')
           .eq('id', userId)
@@ -225,7 +223,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
 
         // If this is an OAuth sign in, store the account
         if (account && account.provider !== 'credentials') {
-          const { data: existingAccount } = await (supabaseAdmin
+          const { data: existingAccount } = await (getSupabaseAdmin()
             .from('accounts') as any)
             .select('id')
             .eq('provider', account.provider)
@@ -234,7 +232,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
 
           if (!existingAccount) {
             // Encrypt tokens before storing
-            await (supabaseAdmin.from('accounts') as any).insert({
+            await (getSupabaseAdmin().from('accounts') as any).insert({
               user_id: userId,
               type: account.type,
               provider: account.provider,
@@ -248,7 +246,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
             });
           } else {
             // Update existing account tokens
-            await (supabaseAdmin
+            await (getSupabaseAdmin()
               .from('accounts') as any)
               .update({
                 access_token: account.access_token ? encryptToken(account.access_token) : null,
@@ -261,7 +259,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         }
 
         // Fetch linked providers
-        const { data: accounts } = await (supabaseAdmin
+        const { data: accounts } = await (getSupabaseAdmin()
           .from('accounts') as any)
           .select('provider')
           .eq('user_id', userId);
@@ -271,7 +269,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         }
       } else if (token.id) {
         // Token refresh - update subscription data
-        const { data: profile } = await (supabaseAdmin
+        const { data: profile } = await (getSupabaseAdmin()
           .from('user_profiles') as any)
           .select('subscription_tier, monthly_usage, usage_reset_date')
           .eq('id', token.id as string)
