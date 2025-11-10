@@ -117,15 +117,14 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
               label: 'Overview',
               content: (
                 <>
-                  {/* Activity Metrics Dashboard */}
-                  {metrics && (
+                  {/* Activity Metrics Dashboard - Temporarily disabled due to Cypher query issues */}
+                  {/* {metrics && (
                     <Card className="mb-6">
                       <h2 className="text-2xl font-bold text-text-primary mb-4 flex items-center">
                         <TrendingUp className="h-6 w-6 mr-2 text-accent-red" />
                         Committee Activity
                       </h2>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {/* Total Meetings */}
                         <div className="p-4 rounded-lg bg-bg-elevated border border-border">
                           <div className="flex items-center gap-2 mb-2">
                             <Calendar className="h-5 w-5 text-blue-400" />
@@ -134,7 +133,6 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                           <p className="text-3xl font-bold text-text-primary">{metrics.total_meetings}</p>
                         </div>
 
-                        {/* Recent Meetings (30 days) */}
                         <div className="p-4 rounded-lg bg-bg-elevated border border-border">
                           <div className="flex items-center gap-2 mb-2">
                             <Calendar className="h-5 w-5 text-green-400" />
@@ -144,7 +142,6 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                           <p className="text-xs text-text-secondary mt-1">meetings</p>
                         </div>
 
-                        {/* Active Bills */}
                         <div className="p-4 rounded-lg bg-bg-elevated border border-border">
                           <div className="flex items-center gap-2 mb-2">
                             <FileText className="h-5 w-5 text-yellow-400" />
@@ -153,7 +150,6 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                           <p className="text-3xl font-bold text-text-primary">{metrics.active_bills_count}</p>
                         </div>
 
-                        {/* Members */}
                         <div className="p-4 rounded-lg bg-bg-elevated border border-border">
                           <div className="flex items-center gap-2 mb-2">
                             <Users className="h-5 w-5 text-purple-400" />
@@ -162,7 +158,6 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                           <p className="text-3xl font-bold text-text-primary">{metrics.member_count}</p>
                         </div>
 
-                        {/* Evidence Documents */}
                         <div className="p-4 rounded-lg bg-bg-elevated border border-border">
                           <div className="flex items-center gap-2 mb-2">
                             <MessageSquare className="h-5 w-5 text-orange-400" />
@@ -171,7 +166,6 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                           <p className="text-3xl font-bold text-text-primary">{metrics.total_evidence_documents}</p>
                         </div>
 
-                        {/* 90-day Activity */}
                         <div className="p-4 rounded-lg bg-bg-elevated border border-border">
                           <div className="flex items-center gap-2 mb-2">
                             <BarChart3 className="h-5 w-5 text-cyan-400" />
@@ -181,7 +175,6 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                           <p className="text-xs text-text-secondary mt-1">meetings</p>
                         </div>
 
-                        {/* Avg Statements */}
                         <div className="p-4 rounded-lg bg-bg-elevated border border-border col-span-2">
                           <div className="flex items-center gap-2 mb-2">
                             <MessageSquare className="h-5 w-5 text-pink-400" />
@@ -191,7 +184,7 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                         </div>
                       </div>
                     </Card>
-                  )}
+                  )} */}
 
                   {/* Committee Members - Org Chart Style */}
                   {committee.members && committee.members.length > 0 && (() => {
