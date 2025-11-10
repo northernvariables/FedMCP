@@ -28,8 +28,13 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'www.ourcommons.ca',
-        pathname: '/Content/Parliamentarians/Images/**',
+        hostname: 'storage.googleapis.com',
+        pathname: '/canada-gpt-ca-mp-photos/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'storage.googleapis.com',
+        pathname: '/canada-gpt-ca-assets/**',
       },
       {
         protocol: 'https',

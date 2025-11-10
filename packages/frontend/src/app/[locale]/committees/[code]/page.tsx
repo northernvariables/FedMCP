@@ -17,6 +17,7 @@ import { Users, FileText, Building2, Calendar, MessageSquare, ExternalLink, Tren
 import { PartyLogo } from '@/components/PartyLogo';
 import { ShareButton } from '@/components/ShareButton';
 import { Tabs } from '@/components/Tabs';
+import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 
 export default function CommitteeDetailPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
@@ -34,14 +35,15 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
     variables: { committeeCode: code, limit: 20 },
   });
 
-  const { data: metricsData, loading: metricsLoading } = useQuery(GET_COMMITTEE_ACTIVITY_METRICS, {
-    variables: { committeeCode: code },
-  });
+  // Temporarily disabled due to Cypher query issues
+  // const { data: metricsData, loading: metricsLoading } = useQuery(GET_COMMITTEE_ACTIVITY_METRICS, {
+  //   variables: { committeeCode: code },
+  // });
 
   const committee = data?.committees?.[0];
   const meetings = meetingsData?.committees?.[0]?.meetings || [];
   const testimony = testimonyData?.committeeTestimony || [];
-  const metrics = metricsData?.committeeActivityMetrics;
+  const metrics = null; // metricsData?.committeeActivityMetrics;
 
   if (loading) {
     return (
@@ -221,12 +223,9 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
 
           // Member Card Component
           const MemberCard = ({ member, large = false }: { member: any; large?: boolean }) => {
-            // Fix photo URL: convert polpics/ to /mp-photos/ and remove _suffix before extension
-            const photoUrl = member.photo_url
-              ? member.photo_url
-                  .replace('polpics/', '/mp-photos/')
-                  .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1')
-              : null;
+            // Get photo URL from GCS or fallback to ID-based construction
+            const photoUrl = getMPPhotoUrl(member);
+            const [imageError, setImageError] = React.useState(false);
 
             return (
               <Link
@@ -236,11 +235,12 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                 <div className="flex flex-col items-center text-center">
                   {/* Photo with role badge */}
                   <div className="relative mb-3">
-                    {photoUrl ? (
+                    {photoUrl && !imageError ? (
                       <img
                         src={photoUrl}
                         alt={member.name}
                         className={`${large ? 'w-28 h-36' : 'w-24 h-32'} rounded-lg object-cover bg-bg-elevated border-2 border-bg-elevated group-hover:border-accent-red transition-colors`}
+                        onError={() => setImageError(true)}
                       />
                     ) : (
                     <div className={`${large ? 'w-28 h-36' : 'w-24 h-32'} rounded-lg bg-bg-elevated border-2 border-bg-elevated group-hover:border-accent-red transition-colors flex items-center justify-center`}>
@@ -514,30 +514,32 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                           className="p-4 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors"
                         >
                           {/* Speaker Info */}
-                          {statement.madeBy && (
-                            <div className="flex items-center gap-3 mb-3">
-                              {statement.madeBy.photo_url && (
-                                <img
-                                  src={statement.madeBy.photo_url
-                                    .replace('polpics/', '/mp-photos/')
-                                    .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1')}
-                                  alt={statement.madeBy.name}
-                                  className="w-12 h-12 rounded-full object-cover bg-bg-elevated"
-                                />
-                              )}
-                              <div>
-                                <Link
-                                  href={`/mps/${statement.madeBy.id}`}
-                                  className="font-semibold text-text-primary hover:text-accent-red"
-                                >
-                                  {statement.madeBy.name}
-                                </Link>
-                                <div className="text-sm text-text-secondary">
-                                  {statement.madeBy.party}
+                          {statement.madeBy && (() => {
+                            const photoUrl = getMPPhotoUrl(statement.madeBy);
+
+                            return (
+                              <div className="flex items-center gap-3 mb-3">
+                                {photoUrl && (
+                                  <img
+                                    src={photoUrl}
+                                    alt={statement.madeBy.name}
+                                    className="w-12 h-12 rounded-full object-cover bg-bg-elevated"
+                                  />
+                                )}
+                                <div>
+                                  <Link
+                                    href={`/mps/${statement.madeBy.id}`}
+                                    className="font-semibold text-text-primary hover:text-accent-red"
+                                  >
+                                    {statement.madeBy.name}
+                                  </Link>
+                                  <div className="text-sm text-text-secondary">
+                                    {statement.madeBy.party}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
 
                           {/* Topic Headers */}
                           {(statement.h1_en || statement.h2_en || statement.h3_en) && (

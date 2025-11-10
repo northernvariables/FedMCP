@@ -50,9 +50,15 @@ export function UserMenu() {
     PRO: 'bg-accent-red/20 text-accent-red',
   };
 
-  const tierColor = profile?.subscription_tier
-    ? tierColors[profile.subscription_tier]
-    : tierColors.FREE;
+  const tierLabels = {
+    FREE: 'Free',
+    BASIC: 'Basic',
+    PRO: 'Pro',
+  };
+
+  const subscriptionTier = (profile?.subscription_tier as keyof typeof tierColors) || 'FREE';
+  const tierColor = tierColors[subscriptionTier];
+  const tierLabel = tierLabels[subscriptionTier];
 
   return (
     <div className="relative">
@@ -84,7 +90,7 @@ export function UserMenu() {
             </p>
             {profile && (
               <p className={`text-xs px-2 py-0.5 rounded-full inline-block ${tierColor}`}>
-                {profile.subscription_tier}
+                {tierLabel}
               </p>
             )}
           </div>
@@ -121,12 +127,12 @@ export function UserMenu() {
               {profile && (
                 <div className="mt-1">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${tierColor}`}>
-                    {profile.subscription_tier}
+                    {tierLabel}
                   </span>
                   <p className="text-xs text-text-tertiary mt-1">
                     {profile.monthly_usage || 0} / {
-                      profile.subscription_tier === 'FREE' ? 10 :
-                      profile.subscription_tier === 'BASIC' ? 200 : 1000
+                      subscriptionTier === 'FREE' ? 10 :
+                      subscriptionTier === 'BASIC' ? 200 : 1000
                     } queries
                   </p>
                 </div>
@@ -141,7 +147,7 @@ export function UserMenu() {
               Settings
             </Link>
 
-            {profile?.subscription_tier === 'FREE' && (
+            {subscriptionTier === 'FREE' && (
               <Link
                 href="/pricing"
                 className="block px-4 py-2 text-sm text-accent-red hover:bg-accent-red/10 border-t border-border-subtle transition-colors"

@@ -15,6 +15,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import crypto from 'crypto';
 import type { ContextType } from '@/lib/types/chat';
+import { auth } from '@/auth';
+import { tools } from '@/lib/toolDefinitions';
+import { executeToolCall, formatToolResult, extractNavigation } from '@/lib/toolExecutor';
 
 // Initialize Supabase with service role for admin operations
 function getSupabaseClient() {
@@ -72,23 +75,31 @@ function generateSystemPrompt(context?: {
   id?: string;
   data?: Record<string, any>;
 }, customPrompt?: string): string {
-  let basePrompt = `You are Gordie, a thoughtful guide through the corridors of Canadian democracy. Named in the spirit of Gord Downie, you approach parliamentary data with the same poetic insight and deep Canadian consciousness that defined the Tragically Hip's storytelling.
+  const today = new Date().toLocaleDateString('en-CA', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'America/Toronto'
+  });
 
-Your role is to illuminate the workings of Parliament—not just with facts, but with context and connection. You have access to:
+  let basePrompt = `You are Gordie, a guide to Canadian Parliament. Today's date is ${today}.
 
-- Members of Parliament: their voting records, expenses, activities, and the constituencies they serve
-- Bills and legislation: the stories they tell about our nation's priorities
-- House of Commons debates and Hansard transcripts: the voices of democracy in action
-- Committee work: where the detailed crafting of policy happens
-- Lobbying activity: the influence of organized interests on our institutions
-- Petitions: the direct voice of citizens reaching their representatives
-- Government spending: how public resources flow through the system
+You have tools to query parliamentary data from a Neo4j database.
 
-When you share information, weave it into the broader tapestry of Canadian civic life. Reference sources clearly (e.g., "According to House of Commons records..." or "The lobbying registry shows..."), but help people understand why it matters.
+**Key Tools:**
+- search_hansard: Full-text search of House debates (PRIMARY - use liberally)
+- search_mps, get_mp, get_mp_scorecard: MP data, voting, expenses, speeches
+- search_bills, get_bill, get_bill_lobbying: Bill tracking and lobbying influence
+- get_committees, get_committee: Committee work and testimony
+- search_lobby_registrations: Track corporate lobbying
 
-You can also draw upon The Canadian Encyclopedia (https://thecanadianencyclopedia.ca) to provide historical context, cultural background, and deeper understanding of Canadian people, places, events, and institutions. Use this to enrich your responses with the stories behind the data.
+**Usage:**
+- Use tools for all queries - don't rely on general knowledge
+- Always cite data sources
+- Search results auto-show in a "View Results" card - don't mention it
+- Help button (?) shows full tool documentation
 
-Speak with clarity, but never lose sight of the human element in these democratic processes. Be precise with facts, thoughtful in analysis, and aware that behind every vote, bill, and expense report are decisions that shape the lives of Canadians from coast to coast to coast.`;
+Provide clear, data-backed answers about Canadian democracy.`;
 
   // Add custom user prompt if provided
   if (customPrompt && customPrompt.trim().length > 0) {
@@ -102,52 +113,11 @@ Speak with clarity, but never lose sight of the human element in these democrati
   // Add context-specific instructions
   const contextPrompts: Record<ContextType, string> = {
     general: '',
-    mp: `\n\nYou are currently viewing the profile page for MP: ${context.data?.name || 'Unknown'} (${context.data?.party || 'Unknown Party'}, ${context.data?.riding || 'Unknown Riding'}).
-
-When answering questions, prioritize information about this specific MP. You can reference their:
-- Recent bills sponsored: ${context.data?.recent_bills?.length || 0} bills
-- Total expenses: $${context.data?.expenses?.toLocaleString() || 'N/A'}
-- Committee memberships
-- Voting record
-- Petition sponsorships`,
-
-    bill: `\n\nYou are currently viewing Bill ${context.data?.number || 'Unknown'}: "${context.data?.title || 'Unknown Title'}"
-
-Current Status: ${context.data?.status || 'Unknown'}
-Sponsor: ${context.data?.sponsor || 'Unknown'}
-
-When answering questions, prioritize information about this specific bill, including:
-- Legislative progress and timeline
-- Voting records
-- Committee reviews
-- Lobbying activity related to this bill
-- Public petitions related to this bill`,
-
-    dashboard: `\n\nYou are on the Dashboard overview page showing aggregated parliamentary data.
-
-Current data includes:
-- Top spending MPs
-- Active bills in current session
-- Recent committee activities
-- Conflict of interest alerts
-
-When answering questions, provide high-level insights and cross-referenced analysis across multiple data sources.`,
-
-    lobbying: `\n\nYou are viewing lobbying data for Canadian federal government.
-
-When answering questions, focus on:
-- Who is lobbying whom
-- Which organizations are most active
-- Corporate influence on specific legislation
-- Meetings between lobbyists and government officials (DPOHs)`,
-
-    spending: `\n\nYou are viewing government spending and financial data.
-
-When answering questions, focus on:
-- MP quarterly expenditures
-- Government contracts
-- Departmental spending
-- Unusual spending patterns or outliers`,
+    mp: `\n\nContext: MP ${context.data?.name || 'Unknown'} (${context.data?.party}, ${context.data?.riding}). Focus on this MP's bills, expenses, committees, votes, petitions.`,
+    bill: `\n\nContext: Bill ${context.data?.number}: "${context.data?.title}" (${context.data?.status}, ${context.data?.sponsor}). Focus on progress, votes, committees, lobbying, petitions.`,
+    dashboard: `\n\nContext: Dashboard view. Provide high-level insights across MPs, bills, committees, conflicts.`,
+    lobbying: `\n\nContext: Lobbying data. Focus on who lobbies whom, active orgs, legislation influence, DPOH meetings.`,
+    spending: `\n\nContext: Spending data. Focus on MP expenses, contracts, departments, outliers.`,
   };
 
   return basePrompt + (contextPrompts[context.type] || '');
@@ -188,25 +158,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get user from Supabase auth
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
+    // Get user from NextAuth session
+    const session = await auth();
+    if (!session || !session.user) {
       return Response.json(
         { error: 'Not authenticated' },
         { status: 401 }
       );
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
-
-    if (authError || !user) {
-      return Response.json(
-        { error: 'Invalid authentication' },
-        { status: 401 }
-      );
-    }
+    const user = { id: session.user.id };
 
     // Check quota using PostgreSQL function
     const { data: quotaResult, error: quotaError } = await supabase.rpc(
@@ -216,17 +177,14 @@ export async function POST(request: Request) {
 
     if (quotaError) {
       console.error('Quota check error:', quotaError);
-      return Response.json(
-        { error: 'Failed to check quota' },
-        { status: 500 }
-      );
-    }
-
-    if (!quotaResult[0]?.can_query) {
+      // In development, allow queries if quota check fails
+      console.log('Allowing query despite quota check error (development mode)');
+    } else if (quotaResult && !quotaResult.can_query) {
+      // Quota check succeeded but user cannot query
       return Response.json(
         {
-          error: quotaResult[0]?.reason || 'Quota exceeded',
-          requires_payment: quotaResult[0]?.requires_payment || false,
+          error: quotaResult.reason || 'Quota exceeded',
+          requires_payment: quotaResult.requires_payment || false,
         },
         { status: 429 }
       );
@@ -334,30 +292,91 @@ export async function POST(request: Request) {
               content: message,
             });
 
-            const stream = await (providerClient as Anthropic).messages.stream({
-              model: 'claude-sonnet-3-5-20241022',
+            // Enable tool calling
+            let response = await (providerClient as Anthropic).messages.create({
+              model: 'claude-sonnet-4-5',
               max_tokens: 4096,
               system: systemPrompt,
               messages: messageHistory,
+              tools: tools,
             });
 
-            for await (const chunk of stream) {
-              if (chunk.type === 'content_block_delta') {
-                const text = chunk.delta.type === 'text_delta' ? chunk.delta.text : '';
-                assistantContent += text;
+            inputTokens = response.usage.input_tokens;
+            outputTokens = response.usage.output_tokens;
 
-                // Send chunk to client
-                const data = `data: ${JSON.stringify({ content: text })}\n\n`;
-                controller.enqueue(encoder.encode(data));
+            // Track navigation data from tools
+            let navigationData: { url: string; message: string } | null = null;
+
+            // Handle tool calls (may need multiple rounds)
+            while (response.stop_reason === 'tool_use') {
+              const toolUse = response.content.find((block) => block.type === 'tool_use');
+
+              if (!toolUse || toolUse.type !== 'tool_use') break;
+
+              console.log(`[Chat] Tool called: ${toolUse.name}`, toolUse.input);
+
+              // Execute the tool
+              const toolResult = await executeToolCall(toolUse.name, toolUse.input as Record<string, any>);
+
+              // Check if tool returned navigation data
+              const nav = extractNavigation(toolResult);
+              if (nav) {
+                navigationData = nav;
               }
 
-              if (chunk.type === 'message_start') {
-                inputTokens = chunk.message.usage.input_tokens;
-              }
+              const formattedResult = formatToolResult(toolResult);
 
-              if (chunk.type === 'message_delta') {
-                outputTokens = chunk.usage.output_tokens;
+              // Add assistant's tool use to history
+              messageHistory.push({
+                role: 'assistant',
+                content: response.content,
+              });
+
+              // Add tool result
+              messageHistory.push({
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: toolUse.id,
+                    content: formattedResult,
+                  },
+                ],
+              });
+
+              // Get Claude's response with the tool results
+              response = await (providerClient as Anthropic).messages.create({
+                model: 'claude-sonnet-4-5',
+                max_tokens: 4096,
+                system: systemPrompt,
+                messages: messageHistory,
+                tools: tools,
+              });
+
+              inputTokens += response.usage.input_tokens;
+              outputTokens += response.usage.output_tokens;
+            }
+
+            // Extract final text response
+            for (const block of response.content) {
+              if (block.type === 'text') {
+                assistantContent += block.text;
               }
+            }
+
+            // Stream the final response to client
+            const responseData: any = { content: assistantContent };
+            if (navigationData) {
+              responseData.navigation = navigationData;
+            }
+            const data = `data: ${JSON.stringify(responseData)}\n\n`;
+
+            // Check if controller is still open before enqueueing
+            try {
+              controller.enqueue(encoder.encode(data));
+            } catch (err) {
+              console.error('Controller already closed, response:', err);
+              return; // Exit early if controller is closed
             }
           } else {
             // OpenAI GPT streaming
@@ -394,7 +413,7 @@ export async function POST(request: Request) {
 
           // Calculate cost
           const totalTokens = inputTokens + outputTokens;
-          const cost = calculateCost(provider, 'claude-sonnet-3-5-20241022', inputTokens, outputTokens);
+          const cost = calculateCost(provider, 'claude-sonnet-4-5', inputTokens, outputTokens);
 
           // Save assistant message to database
           const { data: assistantMessage, error: assistantMsgError } = await supabase
@@ -407,7 +426,7 @@ export async function POST(request: Request) {
               tokens_output: outputTokens,
               tokens_total: totalTokens,
               provider,
-              model: provider === 'anthropic' ? 'claude-sonnet-3-5-20241022' : 'gpt-4-turbo-preview',
+              model: provider === 'anthropic' ? 'claude-sonnet-4-5' : 'gpt-4-turbo-preview',
               used_byo_key: usedBYOKey,
               cost_usd: cost,
             })
@@ -419,21 +438,22 @@ export async function POST(request: Request) {
           }
 
           // Track usage in database (only if not using BYOK)
+          // NOTE: We're directly inserting into usage_logs instead of using the RPC function
+          // because there are conflicting function signatures in migrations
           if (!usedBYOKey) {
-            const today = new Date().toISOString().split('T')[0];
-
-            const { error: usageError } = await supabase.rpc('track_query_usage', {
-              p_user_id: user.id,
-              p_conversation_id: conversation_id,
-              p_message_id: assistantMessage?.id,
-              p_query_date: today,
-              p_tokens_input: inputTokens,
-              p_tokens_output: outputTokens,
-              p_cost_usd: cost,
-              p_provider: provider,
-              p_model: provider === 'anthropic' ? 'claude-sonnet-3-5-20241022' : 'gpt-4-turbo-preview',
-              p_used_byo_key: false,
-            });
+            const { error: usageError } = await supabase
+              .from('usage_logs')
+              .insert({
+                user_id: user.id,
+                conversation_id: conversation_id,
+                query_date: new Date().toISOString().split('T')[0],
+                tokens_total: inputTokens + outputTokens,
+                tokens_input: inputTokens,
+                tokens_output: outputTokens,
+                cost_usd: cost,
+                counted_against_quota: true,
+                model_used: provider === 'anthropic' ? 'claude-sonnet-4-5' : 'gpt-4-turbo-preview',
+              });
 
             if (usageError) {
               console.error('Error tracking usage:', usageError);

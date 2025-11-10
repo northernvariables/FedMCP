@@ -139,7 +139,6 @@ export interface RepresentativeData {
   elected_office: string;
   party_name: string;
   email?: string;
-  photo_url?: string;
   url?: string;
   representative_set_name?: string;
 }

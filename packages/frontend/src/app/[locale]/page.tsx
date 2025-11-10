@@ -25,7 +25,7 @@ export default function Home() {
           {/* Background Image */}
           <div
             className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: 'url(/parliament-buildings.jpg)' }}
+            style={{ backgroundImage: 'url(https://storage.googleapis.com/canada-gpt-ca-assets/parliament-buildings.jpg)' }}
           >
             {/* Dark overlay for text readability */}
             <div className="absolute inset-0 bg-black/60" />

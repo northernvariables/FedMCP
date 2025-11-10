@@ -14,7 +14,9 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Copy, Check } from 'lucide-react';
+import { MapleLeafIcon } from '@canadagpt/design-system';
 import type { Message } from '@/lib/types/chat';
+import { ResultsPromptCard } from './ResultsPromptCard';
 
 interface ChatMessageProps {
   message: Message;
@@ -22,6 +24,7 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
+  const [showResultsCard, setShowResultsCard] = React.useState(true);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -43,10 +46,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
         className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
           isUser
             ? 'bg-accent-red text-white'
-            : 'bg-gray-700 text-gray-300 border border-gray-600'
+            : 'bg-gray-700 text-white border border-gray-600'
         }`}
       >
-        {isUser ? 'U' : 'AI'}
+        {isUser ? 'U' : <MapleLeafIcon className="w-5 h-5" size={20} />}
       </div>
 
       {/* Message Content */}
@@ -64,7 +67,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           }`}
         >
           {isAssistant ? (
-            <div className="prose prose-sm max-w-none dark:prose-invert">
+            <div className="text-sm text-gray-100">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -82,24 +85,34 @@ export function ChatMessage({ message }: ChatMessageProps) {
                     inline ? (
                       <code
                         {...props}
-                        className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm"
+                        className="bg-gray-700 text-gray-100 px-1.5 py-0.5 rounded text-sm font-mono"
                       />
                     ) : (
                       <code
                         {...props}
-                        className="block bg-gray-100 dark:bg-gray-800 p-3 rounded-md text-sm overflow-x-auto"
+                        className="block bg-gray-700 text-gray-100 p-3 rounded-md text-sm overflow-x-auto font-mono"
                       />
                     ),
                   // Custom paragraph spacing
                   p: ({ node, ...props }) => (
-                    <p {...props} className="mb-2 last:mb-0" />
+                    <p {...props} className="mb-2 last:mb-0 text-gray-100" />
                   ),
                   // Custom list styling
                   ul: ({ node, ...props }) => (
-                    <ul {...props} className="list-disc ml-4 mb-2" />
+                    <ul {...props} className="list-disc ml-4 mb-2 text-gray-100" />
                   ),
                   ol: ({ node, ...props }) => (
-                    <ol {...props} className="list-decimal ml-4 mb-2" />
+                    <ol {...props} className="list-decimal ml-4 mb-2 text-gray-100" />
+                  ),
+                  // Headers
+                  h1: ({ node, ...props }) => (
+                    <h1 {...props} className="text-xl font-bold mb-2 text-gray-100" />
+                  ),
+                  h2: ({ node, ...props }) => (
+                    <h2 {...props} className="text-lg font-bold mb-2 text-gray-100" />
+                  ),
+                  h3: ({ node, ...props }) => (
+                    <h3 {...props} className="text-base font-bold mb-2 text-gray-100" />
                   ),
                 }}
               >
@@ -107,9 +120,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
               </ReactMarkdown>
             </div>
           ) : (
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap text-white">{message.content}</p>
           )}
         </div>
+
+        {/* Results Prompt Card (if navigation provided by tool) */}
+        {isAssistant && message.navigation && showResultsCard && (
+          <ResultsPromptCard
+            url={message.navigation.url}
+            onDismiss={() => setShowResultsCard(false)}
+          />
+        )}
 
         {/* Message Metadata */}
         <div

@@ -97,15 +97,57 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         let userId: string;
 
         if (!existingProfile) {
-          // Generate a new UUID for the profile
-          const { randomUUID } = await import('crypto');
-          const newUserId = randomUUID();
+          // Check if auth.users already has a user with this email
+          const { data: { users: existingAuthUsers } } = await supabaseAdmin.auth.admin.listUsers();
+          const existingAuthUser = existingAuthUsers?.find(u => u.email === user.email);
 
-          // Create new profile
+          let authUserId: string;
+
+          if (existingAuthUser) {
+            // Use existing auth user ID
+            authUserId = existingAuthUser.id;
+            console.log(`Using existing auth user ID ${authUserId} for ${user.email}`);
+          } else {
+            // Create user in Supabase Auth first
+            const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+              email: user.email!,
+              email_confirm: true, // Auto-confirm since OAuth provider verified email
+              user_metadata: {
+                full_name: user.name,
+                avatar_url: user.image,
+                provider: account?.provider,
+              },
+            });
+
+            if (authError || !authUser.user) {
+              console.error('Error creating auth user:', authError);
+              throw new Error('Failed to create user in Supabase Auth');
+            }
+
+            authUserId = authUser.user.id;
+            console.log(`Created new auth user ID ${authUserId} for ${user.email}`);
+          }
+
+          // Create record in users table
+          const { error: usersError } = await supabaseAdmin
+            .from('users')
+            .insert({
+              id: authUserId,
+              email: user.email,
+            })
+            .select()
+            .single();
+
+          if (usersError) {
+            console.error('Error creating user record:', usersError);
+            // Don't throw - the users table might not exist or have different schema
+          }
+
+          // Create new profile with auth user ID
           const { data: newProfile, error } = await supabaseAdmin
             .from('user_profiles')
             .insert({
-              id: newUserId,
+              id: authUserId,
               email: user.email,
               full_name: user.name,
               display_name: user.name || user.email?.split('@')[0],
@@ -122,7 +164,36 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
           }
           userId = newProfile.id;
         } else {
-          userId = existingProfile.id;
+          // For existing profiles, ensure we use the auth.users ID if it exists
+          const { data: { users: existingAuthUsers } } = await supabaseAdmin.auth.admin.listUsers();
+          const existingAuthUser = existingAuthUsers?.find(u => u.email === user.email);
+
+          if (existingAuthUser && existingAuthUser.id !== existingProfile.id) {
+            console.warn(`Profile ID mismatch for ${user.email}: profile=${existingProfile.id}, auth=${existingAuthUser.id}. Using auth ID.`);
+            userId = existingAuthUser.id;
+          } else {
+            userId = existingProfile.id;
+          }
+
+          // Ensure users table record exists
+          const { data: existingUser } = await supabaseAdmin
+            .from('users')
+            .select('id')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (!existingUser) {
+            const { error: usersError } = await supabaseAdmin
+              .from('users')
+              .insert({
+                id: userId,
+                email: user.email,
+              });
+
+            if (usersError) {
+              console.error('Error creating users record for existing profile:', usersError);
+            }
+          }
 
           // Update existing profile with latest OAuth info
           await supabaseAdmin
@@ -198,14 +269,27 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         if (accounts) {
           token.linkedProviders = accounts.map((acc: any) => acc.provider);
         }
+      } else if (token.id) {
+        // Token refresh - update subscription data
+        const { data: profile } = await supabaseAdmin
+          .from('user_profiles')
+          .select('subscription_tier, monthly_usage, usage_reset_date')
+          .eq('id', token.id as string)
+          .single();
+
+        if (profile) {
+          token.subscriptionTier = profile.subscription_tier;
+          token.monthlyUsage = profile.monthly_usage;
+          token.usageResetDate = profile.usage_reset_date;
+        }
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.subscriptionTier = token.subscriptionTier as string;
-        session.user.monthlyUsage = token.monthlyUsage as number;
+        session.user.subscriptionTier = (token.subscriptionTier as string) || 'FREE';
+        session.user.monthlyUsage = (token.monthlyUsage as number) || 0;
         session.user.createdAt = token.createdAt as string;
         session.user.usageResetDate = token.usageResetDate as string;
         session.user.linkedProviders = token.linkedProviders as string[];

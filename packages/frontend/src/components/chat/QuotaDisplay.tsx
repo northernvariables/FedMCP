@@ -60,18 +60,11 @@ export function QuotaDisplay() {
             <>
               <Zap className="w-4 h-4 text-accent-red" />
               <span className="text-xs font-medium text-gray-400">
-                {queries_remaining} queries today
+                {queries_remaining} queries remaining
               </span>
             </>
           )}
         </div>
-
-        {/* Usage stats */}
-        {usageStats && (
-          <div className="text-xs text-gray-500">
-            {usageStats.queries_today}/{usageStats.queries_this_month} this month
-          </div>
-        )}
       </div>
 
       {/* Warning message */}

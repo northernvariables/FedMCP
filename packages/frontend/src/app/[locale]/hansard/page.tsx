@@ -5,15 +5,17 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@apollo/client';
 import { useTranslations, useLocale } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Loading } from '@/components/Loading';
 import { Card, Button } from '@canadagpt/design-system';
 import { SEARCH_HANSARD, SEARCH_MPS } from '@/lib/queries';
 import { Link } from '@/i18n/navigation';
+import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 import {
   Search,
   Calendar,
@@ -36,6 +38,7 @@ import { ThreadToggle, ConversationThread } from '@/components/hansard';
 export default function HansardPage() {
   const t = useTranslations('hansard');
   const locale = useLocale();
+  const searchParams = useSearchParams();
 
   // Threading state
   const { enabled: threadedViewEnabled, setEnabled: setThreadedViewEnabled } = usePageThreading();
@@ -53,6 +56,33 @@ export default function HansardPage() {
   const [minWordCount, setMinWordCount] = useState<number>(0);
   const [documentType, setDocumentType] = useState<string>('');
   const [onlySubstantive, setOnlySubstantive] = useState(false);
+
+  // Initialize from URL parameters
+  useEffect(() => {
+    const query = searchParams.get('q');
+    const mp = searchParams.get('mp');
+    const party = searchParams.get('party');
+    const docType = searchParams.get('docType');
+    const excludeProcedural = searchParams.get('excludeProcedural');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+
+    if (query) {
+      setSearchQuery(query);
+      setActiveQuery(query);
+    }
+    if (mp) setSelectedMP(mp);
+    if (party) setSelectedParty(party);
+    if (docType) setDocumentType(docType);
+    if (excludeProcedural === 'true') setOnlySubstantive(true);
+    if (startDate) setDateRange(prev => ({ ...prev, start: startDate }));
+    if (endDate) setDateRange(prev => ({ ...prev, end: endDate }));
+
+    // Show filters if any are set
+    if (mp || party || docType || excludeProcedural || startDate || endDate) {
+      setShowFilters(true);
+    }
+  }, [searchParams]);
 
   // Fetch search results
   // TODO: Add language parameter once backend supports it: language: locale
@@ -437,12 +467,8 @@ export default function HansardPage() {
                 const content = bilingualSpeech.content || '';
                 const preview = content.length > 300 ? content.substring(0, 300) + '...' : content;
 
-                // Fix photo URL: convert polpics/ to /mp-photos/ and remove _suffix before extension
-                const photoUrl = speech.madeBy?.photo_url
-                  ? speech.madeBy.photo_url
-                      .replace('polpics/', '/mp-photos/')
-                      .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1')
-                  : null;
+                // Get photo URL from GCS or fallback to ID-based construction
+                const photoUrl = speech.madeBy ? getMPPhotoUrl(speech.madeBy) : null;
 
                 return (
                   <div

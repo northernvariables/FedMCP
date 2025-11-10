@@ -13,9 +13,9 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Minimize2, Maximize2 } from 'lucide-react';
+import { X, HelpCircle, ExternalLink, Maximize2, Minimize2 } from 'lucide-react';
 import { MapleLeafIcon } from '@canadagpt/design-system';
-import { useChatOpen, useChatQuota } from '@/lib/stores/chatStore';
+import { useChatOpen, useChatQuota, useChatExpanded } from '@/lib/stores/chatStore';
 import { useChatStore } from '@/lib/stores/chatStore';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,27 +23,50 @@ import { ChatHistory } from './ChatHistory';
 import { ChatInput } from './ChatInput';
 import { ChatSuggestions } from './ChatSuggestions';
 import { QuotaDisplay } from './QuotaDisplay';
+import { ChatHelp } from './ChatHelp';
 
 export function ChatWidget() {
   const [isOpen, toggleOpen] = useChatOpen();
-  const [isMinimized, setIsMinimized] = React.useState(false);
-  const { checkQuota, refreshUsageStats } = useChatQuota();
+  const [isExpanded, toggleExpanded] = useChatExpanded();
+  const [showHelp, setShowHelp] = React.useState(false);
+  const { checkQuota, refreshUsageStats} = useChatQuota();
   const { preferences, updatePreferences } = useUserPreferences();
   const { user } = useAuth();
-  const { sendMessage, messages, conversation, createConversation } = useChatStore();
+  const { addMessage, messages, conversation, createConversation } = useChatStore();
   const [hasShownWelcome, setHasShownWelcome] = React.useState(false);
+
+  // Handle pop-out to separate window
+  const handlePopOut = () => {
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width - width - 50;
+    const top = 50;
+
+    window.open(
+      '/chat/window',
+      'ChatWindow',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no`
+    );
+
+    // Close the widget when popping out
+    toggleOpen();
+  };
 
   // Initialize quota check on mount
   React.useEffect(() => {
+    if (!user) return; // Skip if not authenticated
     checkQuota();
     refreshUsageStats();
-  }, [checkQuota, refreshUsageStats]);
+  }, [user, checkQuota, refreshUsageStats]);
 
   // Welcome flow for first-time users
   React.useEffect(() => {
     const showWelcome = async () => {
       // Only show welcome if user is logged in, hasn't seen it, and we haven't shown it this session
       if (user && preferences && !preferences.has_seen_welcome && !hasShownWelcome) {
+        // Mark as shown immediately to prevent re-triggering
+        setHasShownWelcome(true);
+
         // Wait a moment for the page to settle
         await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -53,32 +76,40 @@ export function ChatWidget() {
         }
 
         // Create conversation if it doesn't exist
-        if (!conversation) {
+        const currentConversation = useChatStore.getState().conversation;
+        if (!currentConversation) {
           await createConversation();
         }
 
         // Wait another moment for the chat to open
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Send welcome message
-        const welcomeMessage = `Hey there. I'm Gordie, your guide through the corridors of Canadian democracy.
+        // Add welcome message directly (not through API)
+        const welcomeMessage = `Hey there. I'm Gordie, your guide to Canadian Parliament.
 
-I'm here to help you understand what's happening in Parliament—who's saying what, who's voting how, and where your tax dollars are flowing. Think of me as a thoughtful companion for navigating the sometimes complex world of federal politics.
+Ask me about MPs, bills, committees, lobbying, or anything related to federal politics. I'll give you context and connections from parliamentary records, lobbying data, and The Canadian Encyclopedia.
 
-You can ask me about MPs, bills making their way through the House, committee work, lobbying activity, or pretty much anything related to how our democracy operates. I'll draw on parliamentary records, the lobbying registry, and The Canadian Encyclopedia to give you context and connections, not just raw data.
+What would you like to know?`;
 
-What would you like to know about Canadian politics today?`;
+        const finalConversation = useChatStore.getState().conversation;
+        if (finalConversation) {
+          addMessage({
+            id: crypto.randomUUID(),
+            conversation_id: finalConversation.id,
+            role: 'assistant',
+            content: welcomeMessage,
+            used_byo_key: false,
+            created_at: new Date().toISOString(),
+          });
+        }
 
-        await sendMessage(welcomeMessage);
-
-        // Mark as seen
+        // Mark as seen in preferences
         await updatePreferences({ has_seen_welcome: true });
-        setHasShownWelcome(true);
       }
     };
 
     showWelcome();
-  }, [user, preferences, hasShownWelcome, isOpen, toggleOpen, conversation, createConversation, sendMessage, updatePreferences]);
+  }, [user, preferences, hasShownWelcome, isOpen, toggleOpen, createConversation, addMessage, updatePreferences]);
 
   // Keyboard shortcut: Cmd/Ctrl + K
   React.useEffect(() => {
@@ -97,6 +128,11 @@ What would you like to know about Canadian politics today?`;
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, toggleOpen]);
+
+  // Don't show chat widget for users who are not signed in
+  if (!user) {
+    return null;
+  }
 
   return (
     <>
@@ -130,61 +166,104 @@ What would you like to know about Canadian politics today?`;
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-            className="z-50 bg-gray-900 bg-opacity-30 backdrop-blur-md rounded-lg shadow-2xl border border-gray-700 border-opacity-30 overflow-hidden flex flex-col relative"
+            className="z-50 bg-gray-900 bg-opacity-30 backdrop-blur-md rounded-lg shadow-2xl border border-gray-700 border-opacity-30 overflow-hidden flex flex-col relative pointer-events-auto transition-all duration-300"
             style={{
               position: 'fixed',
-              bottom: '24px',
-              right: '24px',
-              width: isMinimized ? '400px' : '600px',
-              height: isMinimized ? '60px' : '500px',
-              maxHeight: 'calc(100vh - 100px)',
-              maxWidth: 'calc(100vw - 100px)',
+              bottom: isExpanded ? '0' : '24px',
+              right: isExpanded ? '0' : '24px',
+              top: isExpanded ? '0' : 'auto',
+              width: isExpanded ? '25vw' : '600px',
+              height: isExpanded ? '100vh' : '500px',
+              maxHeight: isExpanded ? '100vh' : 'calc(100vh - 100px)',
+              maxWidth: isExpanded ? '25vw' : 'calc(100vw - 100px)',
+              borderRadius: isExpanded ? '0' : undefined,
             }}
           >
-            {/* Content (hidden when minimized) */}
-            {!isMinimized && (
-              <>
+            {/* Content */}
+            {(
+              <div className="flex flex-col h-full">
                 {/* Quota display */}
-                <QuotaDisplay />
+                <div className="flex-shrink-0">
+                  <QuotaDisplay />
+                </div>
 
-                {/* Chat history */}
+                {/* Chat history - takes remaining space */}
                 <ChatHistory />
 
-                {/* Input */}
-                <ChatInput />
+                {/* Bottom section: suggestions + input + buttons */}
+                <div className="flex-shrink-0">
+                  {/* Suggested prompts */}
+                  <ChatSuggestions />
 
-                {/* Suggested prompts */}
-                <ChatSuggestions />
-              </>
+                  {/* Input */}
+                  <ChatInput />
+
+                  {/* Control buttons */}
+                  <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-gray-700 bg-gray-900">
+                    {/* Left side buttons */}
+                    <div className="flex items-center gap-2">
+                      {/* Help button - just question mark */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowHelp(true);
+                        }}
+                        className="p-2 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+                        title="Show help"
+                      >
+                        <HelpCircle className="w-4 h-4" />
+                      </button>
+
+                      {/* Pop-out button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePopOut();
+                        }}
+                        className="p-2 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+                        title="Pop out to window"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+
+                      {/* Expand button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpanded();
+                        }}
+                        className="p-2 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+                        title={isExpanded ? 'Collapse' : 'Expand'}
+                      >
+                        {isExpanded ? (
+                          <Minimize2 className="w-4 h-4" />
+                        ) : (
+                          <Maximize2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Close button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleOpen();
+                      }}
+                      className="p-2 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+                      title="Close (Esc)"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
-
-            {/* Control buttons - bottom right */}
-            <div className="absolute bottom-4 right-4 flex items-center gap-2 z-50">
-              {/* Minimize/Maximize button */}
-              <button
-                onClick={() => setIsMinimized(!isMinimized)}
-                className="p-2 bg-gray-800 bg-opacity-70 hover:bg-accent-red text-white rounded-lg transition-colors backdrop-blur-sm"
-                title={isMinimized ? 'Maximize' : 'Minimize'}
-              >
-                {isMinimized ? (
-                  <Maximize2 className="w-4 h-4" />
-                ) : (
-                  <Minimize2 className="w-4 h-4" />
-                )}
-              </button>
-
-              {/* Close button */}
-              <button
-                onClick={toggleOpen}
-                className="p-2 bg-gray-800 bg-opacity-70 hover:bg-accent-red text-white rounded-lg transition-colors backdrop-blur-sm"
-                title="Close (Esc)"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Help modal */}
+      {showHelp && <ChatHelp onClose={() => setShowHelp(false)} />}
     </>
   );
 }

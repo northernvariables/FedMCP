@@ -10,7 +10,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import createIntlMiddleware from 'next-intl/middleware';
 import { locales, defaultLocale, localePrefix, pathnames } from './i18n/config';
-import { auth } from '@/auth';
+import NextAuth from 'next-auth';
+import type { NextAuthConfig } from 'next-auth';
 
 // Routes that require authentication (without locale prefix)
 const protectedRoutes = [
@@ -31,6 +32,17 @@ const intlMiddleware = createIntlMiddleware({
   localeDetection: true,
 });
 
+// Edge-compatible auth config (minimal, without database/crypto operations)
+const authConfig: NextAuthConfig = {
+  providers: [],
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
+  session: {
+    strategy: 'jwt',
+  },
+};
+
+const { auth } = NextAuth(authConfig);
+
 export async function middleware(request: NextRequest) {
   // First, handle internationalization
   const intlResponse = intlMiddleware(request);
@@ -46,7 +58,7 @@ export async function middleware(request: NextRequest) {
     ? pathname.slice(`/${pathnameLocale}`.length) || '/'
     : pathname;
 
-  // Get NextAuth session
+  // Get NextAuth session (from JWT, no database access)
   const session = await auth();
 
   // Check if route is protected

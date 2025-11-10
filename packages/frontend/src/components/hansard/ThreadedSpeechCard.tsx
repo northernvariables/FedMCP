@@ -13,6 +13,7 @@ import { fr, enUS } from 'date-fns/locale';
 import { getBilingualContent } from '@/hooks/useBilingual';
 import { ShareButton } from '../ShareButton';
 import { PrintableCard } from '../PrintableCard';
+import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 
 interface Statement {
   id: string;
@@ -136,12 +137,9 @@ const StatementCard = React.memo(function StatementCard({
   const colors = getPartyColors(party);
   const typeBadge = getStatementTypeBadge(statement.statement_type);
 
-  // Fix photo URL: convert polpics/ to /mp-photos/ and remove _suffix before extension
-  const photoUrl = statement.madeBy?.photo_url
-    ? statement.madeBy.photo_url
-        .replace('polpics/', '/mp-photos/')
-        .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1')
-    : null;
+  // Get photo URL from GCS or fallback to ID-based construction
+  const photoUrl = statement.madeBy ? getMPPhotoUrl(statement.madeBy) : null;
+  const [imageError, setImageError] = React.useState(false);
 
   // Share data
   const shareUrl = `/${locale}/hansard#${statement.id}`;
@@ -186,12 +184,13 @@ const StatementCard = React.memo(function StatementCard({
       <div className="flex items-start justify-between gap-3 mb-3 pr-10">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Avatar */}
-          {photoUrl ? (
+          {photoUrl && !imageError ? (
             <img
               src={photoUrl}
               alt={statement.madeBy?.name || 'MP'}
               className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
               style={{ objectPosition: 'center -3px' }}
+              onError={() => setImageError(true)}
             />
           ) : (
             <div className="w-10 h-10 rounded-lg bg-bg-tertiary flex items-center justify-center flex-shrink-0">

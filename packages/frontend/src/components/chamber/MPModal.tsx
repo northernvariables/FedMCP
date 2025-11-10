@@ -15,13 +15,13 @@ import { X, ExternalLink, MapPin, Users, FileText, DollarSign, Phone, Mail, Play
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 
 interface MP {
   id: string;
   name: string;
   party: string;
   riding: string;
-  photo_url?: string;
   cabinet_position?: string;
   email?: string;
   phone?: string;
@@ -52,12 +52,9 @@ export function MPModal({ mp, isOpen, onClose }: MPModalProps) {
 
   const partyColor = PARTY_COLORS[mp.party] || PARTY_COLORS['Independent'];
 
-  // Fix photo URL: convert polpics/ to /mp-photos/ and remove _suffix before extension
-  const photoUrl = mp.photo_url
-    ? mp.photo_url
-        .replace('polpics/', '/mp-photos/')
-        .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1')
-    : null;
+  // Get photo URL from GCS or fallback to ID-based construction
+  const photoUrl = getMPPhotoUrl(mp);
+  const [imageError, setImageError] = React.useState(false);
 
   const handleViewProfile = () => {
     onClose();
@@ -109,7 +106,7 @@ export function MPModal({ mp, isOpen, onClose }: MPModalProps) {
                 {/* Compact Header with Photo and Info */}
                 <div className="px-6 py-4 flex items-center gap-4">
                   {/* Small Photo */}
-                  {photoUrl ? (
+                  {photoUrl && !imageError ? (
                     <div className="flex-shrink-0">
                       <Image
                         src={photoUrl}
@@ -118,6 +115,7 @@ export function MPModal({ mp, isOpen, onClose }: MPModalProps) {
                         height={80}
                         className="rounded-full border-3 shadow-md"
                         style={{ borderColor: partyColor }}
+                        onError={() => setImageError(true)}
                       />
                     </div>
                   ) : (

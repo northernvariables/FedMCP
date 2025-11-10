@@ -6,8 +6,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import type { SupabaseClient, User } from '@supabase/auth-helpers-nextjs';
+import { useSession } from 'next-auth/react';
 
 export interface UserPreferences {
   // Threading preferences
@@ -27,6 +26,9 @@ export interface UserPreferences {
   // Notification preferences
   emailNotifications: boolean;
   pushNotifications: boolean;
+
+  // Chat preferences
+  has_seen_welcome?: boolean;
 }
 
 // Default preferences for new users or when not authenticated
@@ -41,12 +43,13 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   statementsPerPage: 20,
   emailNotifications: true,
   pushNotifications: false,
+  has_seen_welcome: false,
 };
 
 interface UserPreferencesContextType {
   preferences: UserPreferences;
   loading: boolean;
-  user: User | null;
+  user: { id: string; email: string } | null;
   updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>;
   resetPreferences: () => Promise<void>;
 }
@@ -56,43 +59,46 @@ const UserPreferencesContext = createContext<UserPreferencesContextType | undefi
 export function UserPreferencesProvider({ children }: { children: React.ReactNode }) {
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
-  const supabase = createClientComponentClient();
+  const { data: session, status } = useSession();
+
+  // Map NextAuth user to simple user object
+  const user = session?.user ? { id: session.user.id, email: session.user.email! } : null;
 
   /**
-   * Load preferences from Supabase or localStorage
+   * Load preferences from API or localStorage
    */
-  const loadPreferences = useCallback(async (currentUser: User | null) => {
+  const loadPreferences = useCallback(async (currentUser: { id: string; email: string } | null) => {
     try {
       if (currentUser) {
-        // Load from Supabase for authenticated users
-        const { data, error } = await supabase
-          .from('user_preferences')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .single();
+        // Load from API for authenticated users
+        const response = await fetch('/api/user/preferences');
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-          console.error('Error loading preferences:', error);
+        if (!response.ok) {
+          console.error('Error loading preferences:', response.status);
           // Fall back to defaults
           setPreferences(DEFAULT_PREFERENCES);
-        } else if (data) {
-          // Map database column names to camelCase
-          setPreferences({
-            threadedViewEnabled: data.threaded_view_enabled ?? DEFAULT_PREFERENCES.threadedViewEnabled,
-            threadedViewDefaultCollapsed: data.threaded_view_default_collapsed ?? DEFAULT_PREFERENCES.threadedViewDefaultCollapsed,
-            language: data.language ?? DEFAULT_PREFERENCES.language,
-            theme: data.theme ?? DEFAULT_PREFERENCES.theme,
-            density: data.density ?? DEFAULT_PREFERENCES.density,
-            showProceduralStatements: data.show_procedural_statements ?? DEFAULT_PREFERENCES.showProceduralStatements,
-            defaultHansardFilter: data.default_hansard_filter ?? DEFAULT_PREFERENCES.defaultHansardFilter,
-            statementsPerPage: data.statements_per_page ?? DEFAULT_PREFERENCES.statementsPerPage,
-            emailNotifications: data.email_notifications ?? DEFAULT_PREFERENCES.emailNotifications,
-            pushNotifications: data.push_notifications ?? DEFAULT_PREFERENCES.pushNotifications,
-          });
         } else {
-          // No preferences found, use defaults
-          setPreferences(DEFAULT_PREFERENCES);
+          const { data } = await response.json();
+
+          if (data) {
+            // Map database column names to camelCase
+            setPreferences({
+              threadedViewEnabled: data.threaded_view_enabled ?? DEFAULT_PREFERENCES.threadedViewEnabled,
+              threadedViewDefaultCollapsed: data.threaded_view_default_collapsed ?? DEFAULT_PREFERENCES.threadedViewDefaultCollapsed,
+              language: data.language ?? DEFAULT_PREFERENCES.language,
+              theme: data.theme ?? DEFAULT_PREFERENCES.theme,
+              density: data.density ?? DEFAULT_PREFERENCES.density,
+              showProceduralStatements: data.show_procedural_statements ?? DEFAULT_PREFERENCES.showProceduralStatements,
+              defaultHansardFilter: data.default_hansard_filter ?? DEFAULT_PREFERENCES.defaultHansardFilter,
+              statementsPerPage: data.statements_per_page ?? DEFAULT_PREFERENCES.statementsPerPage,
+              emailNotifications: data.email_notifications ?? DEFAULT_PREFERENCES.emailNotifications,
+              pushNotifications: data.push_notifications ?? DEFAULT_PREFERENCES.pushNotifications,
+              has_seen_welcome: data.has_seen_welcome ?? DEFAULT_PREFERENCES.has_seen_welcome,
+            });
+          } else {
+            // No preferences found, use defaults
+            setPreferences(DEFAULT_PREFERENCES);
+          }
         }
       } else {
         // Not authenticated - load from localStorage
@@ -115,34 +121,18 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   /**
    * Initialize - load user and preferences
+   * React to NextAuth session changes
    */
   useEffect(() => {
-    const initializeAuth = async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      setUser(currentUser);
-      await loadPreferences(currentUser);
-    };
-
-    initializeAuth();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        setLoading(true);
-        await loadPreferences(currentUser);
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [supabase, loadPreferences]);
+    if (status !== 'loading') {
+      setLoading(true);
+      loadPreferences(user);
+    }
+  }, [user?.id, status, loadPreferences]);
 
   /**
    * Update preferences
@@ -152,7 +142,7 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
     setPreferences(newPreferences);
 
     if (user) {
-      // Save to Supabase for authenticated users
+      // Save to API for authenticated users
       // Map camelCase to snake_case for database
       const dbUpdates: any = {};
       if ('threadedViewEnabled' in updates) dbUpdates.threaded_view_enabled = updates.threadedViewEnabled;
@@ -165,25 +155,26 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
       if ('statementsPerPage' in updates) dbUpdates.statements_per_page = updates.statementsPerPage;
       if ('emailNotifications' in updates) dbUpdates.email_notifications = updates.emailNotifications;
       if ('pushNotifications' in updates) dbUpdates.push_notifications = updates.pushNotifications;
+      if ('has_seen_welcome' in updates) dbUpdates.has_seen_welcome = updates.has_seen_welcome;
 
-      const { error } = await supabase
-        .from('user_preferences')
-        .upsert({
-          user_id: user.id,
-          ...dbUpdates,
-        }, {
-          onConflict: 'user_id'
-        });
+      const response = await fetch('/api/user/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dbUpdates),
+      });
 
-      if (error) {
-        console.error('Error saving preferences to Supabase:', error);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.warn('Error saving preferences via API:', errorData.error);
         // Still update local state even if save fails
       }
     } else {
       // Save to localStorage for non-authenticated users
       localStorage.setItem('canadagpt_preferences', JSON.stringify(newPreferences));
     }
-  }, [preferences, user, supabase]);
+  }, [preferences, user]);
 
   /**
    * Reset to defaults
@@ -192,35 +183,36 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
     setPreferences(DEFAULT_PREFERENCES);
 
     if (user) {
-      // Reset in Supabase
-      const { error } = await supabase
-        .from('user_preferences')
-        .upsert({
-          user_id: user.id,
-          ...{
-            threaded_view_enabled: DEFAULT_PREFERENCES.threadedViewEnabled,
-            threaded_view_default_collapsed: DEFAULT_PREFERENCES.threadedViewDefaultCollapsed,
-            language: DEFAULT_PREFERENCES.language,
-            theme: DEFAULT_PREFERENCES.theme,
-            density: DEFAULT_PREFERENCES.density,
-            show_procedural_statements: DEFAULT_PREFERENCES.showProceduralStatements,
-            default_hansard_filter: DEFAULT_PREFERENCES.defaultHansardFilter,
-            statements_per_page: DEFAULT_PREFERENCES.statementsPerPage,
-            email_notifications: DEFAULT_PREFERENCES.emailNotifications,
-            push_notifications: DEFAULT_PREFERENCES.pushNotifications,
-          }
-        }, {
-          onConflict: 'user_id'
-        });
+      // Reset via API
+      const response = await fetch('/api/user/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          threaded_view_enabled: DEFAULT_PREFERENCES.threadedViewEnabled,
+          threaded_view_default_collapsed: DEFAULT_PREFERENCES.threadedViewDefaultCollapsed,
+          language: DEFAULT_PREFERENCES.language,
+          theme: DEFAULT_PREFERENCES.theme,
+          density: DEFAULT_PREFERENCES.density,
+          show_procedural_statements: DEFAULT_PREFERENCES.showProceduralStatements,
+          default_hansard_filter: DEFAULT_PREFERENCES.defaultHansardFilter,
+          statements_per_page: DEFAULT_PREFERENCES.statementsPerPage,
+          email_notifications: DEFAULT_PREFERENCES.emailNotifications,
+          push_notifications: DEFAULT_PREFERENCES.pushNotifications,
+          has_seen_welcome: DEFAULT_PREFERENCES.has_seen_welcome,
+        }),
+      });
 
-      if (error) {
-        console.error('Error resetting preferences in Supabase:', error);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error resetting preferences via API:', errorData.error);
       }
     } else {
       // Clear localStorage
       localStorage.removeItem('canadagpt_preferences');
     }
-  }, [user, supabase]);
+  }, [user]);
 
   const value = {
     preferences,

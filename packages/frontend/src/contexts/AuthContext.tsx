@@ -54,7 +54,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sign out using NextAuth
   const signOut = async () => {
-    await nextAuthSignOut({ redirect: true, callbackUrl: '/' });
+    try {
+      await nextAuthSignOut({ redirect: false });
+      // Force a hard reload to clear all state
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error signing out:', error);
+      // Force reload even if there's an error
+      window.location.href = '/';
+    }
   };
 
   // Refresh profile data (re-fetch session)

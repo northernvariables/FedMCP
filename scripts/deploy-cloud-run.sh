@@ -32,7 +32,7 @@ gcloud run deploy $SERVICE_NAME \
   --max-instances=10 \
   --timeout=300 \
   --set-env-vars="NEO4J_URI=bolt://${NEO4J_INTERNAL_IP}:7687,NEO4J_USER=neo4j,NEO4J_PASSWORD=${NEO4J_PASSWORD},NODE_ENV=production" \
-  --set-env-vars="CORS_ORIGINS=https://canadagpt.ca,http://localhost:3000" \
+  --set-env-vars="CORS_ORIGINS=https^:^//canadagpt.ca,http^:^//localhost^:^3000,https^:^//www.canadagpt.ca" \
   --vpc-connector=canadagpt-connector \
   --vpc-egress=private-ranges-only
 

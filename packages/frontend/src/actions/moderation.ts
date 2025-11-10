@@ -6,6 +6,7 @@
  */
 
 import { createServerClient, createAdminClient } from '@/lib/supabase-server';
+import { auth } from '@/auth';
 import type {
   ModerationReport,
   ModerationAction,
@@ -25,13 +26,13 @@ export async function reportPost(
 ): Promise<ApiResponse> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('You must be logged in to report content');
     }
+
+    const userId = session.user.id;
 
     // Check if post exists
     const { data: post } = await supabase
@@ -49,7 +50,7 @@ export async function reportPost(
       .from('moderation_reports')
       .select('id')
       .eq('post_id', input.post_id)
-      .eq('reporter_id', user.id)
+      .eq('reporter_id', userId)
       .maybeSingle();
 
     if (existingReport) {
@@ -59,7 +60,7 @@ export async function reportPost(
     // Create report
     const { error } = await supabase.from('moderation_reports').insert({
       post_id: input.post_id,
-      reporter_id: user.id,
+      reporter_id: userId,
       reason: input.reason,
       status: 'pending',
     });
@@ -112,15 +113,15 @@ export async function getPendingReports(
 ): Promise<ApiResponse<PaginatedResponse<ModerationReport>>> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('Unauthorized');
     }
 
-    const admin = await isAdmin(user.id);
+    const userId = session.user.id;
+
+    const admin = await isAdmin(userId);
     if (!admin) {
       throw new Error('Admin access required');
     }
@@ -165,15 +166,15 @@ export async function resolveReport(
 ): Promise<ApiResponse> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('Unauthorized');
     }
 
-    const admin = await isAdmin(user.id);
+    const userId = session.user.id;
+
+    const admin = await isAdmin(userId);
     if (!admin) {
       throw new Error('Admin access required');
     }
@@ -182,7 +183,7 @@ export async function resolveReport(
       .from('moderation_reports')
       .update({
         status: input.status,
-        resolved_by: user.id,
+        resolved_by: userId,
         resolved_at: new Date().toISOString(),
         admin_notes: input.admin_notes || null,
       })
@@ -209,15 +210,15 @@ export async function moderatePost(
 ): Promise<ApiResponse> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('Unauthorized');
     }
 
-    const admin = await isAdmin(user.id);
+    const userId = session.user.id;
+
+    const admin = await isAdmin(userId);
     if (!admin) {
       throw new Error('Admin access required');
     }
@@ -244,7 +245,7 @@ export async function moderatePost(
         updateData = {
           is_deleted: true,
           deleted_at: new Date().toISOString(),
-          deleted_by: user.id,
+          deleted_by: userId,
         };
         break;
 
@@ -299,7 +300,7 @@ export async function moderatePost(
       .from('moderation_actions')
       .insert({
         post_id: input.post_id,
-        moderator_id: user.id,
+        moderator_id: userId,
         action: input.action,
         reason: input.reason || null,
       });
@@ -321,15 +322,15 @@ export async function getModerationActions(
 ): Promise<ApiResponse<ModerationAction[]>> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('Unauthorized');
     }
 
-    const admin = await isAdmin(user.id);
+    const userId = session.user.id;
+
+    const admin = await isAdmin(userId);
     if (!admin) {
       throw new Error('Admin access required');
     }
@@ -368,15 +369,15 @@ export async function bulkModerate(
 ): Promise<ApiResponse<{ successful: string[]; failed: string[] }>> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('Unauthorized');
     }
 
-    const admin = await isAdmin(user.id);
+    const userId = session.user.id;
+
+    const admin = await isAdmin(userId);
     if (!admin) {
       throw new Error('Admin access required');
     }
@@ -420,15 +421,15 @@ export async function getModerationStats(): Promise<
 > {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('Unauthorized');
     }
 
-    const admin = await isAdmin(user.id);
+    const userId = session.user.id;
+
+    const admin = await isAdmin(userId);
     if (!admin) {
       throw new Error('Admin access required');
     }

@@ -20,7 +20,6 @@ export const typeDefs = `#graphql
     riding: String
     current: Boolean!
     elected_date: Date
-    photo_url: String
     email: String
     phone: String
     twitter: String
@@ -640,7 +639,6 @@ export const typeDefs = `#graphql
             party: mp.party,
             riding: mp.riding,
             current: mp.current,
-            photo_url: mp.photo_url,
             cabinet_position: mp.cabinet_position
           },
           bills_sponsored: bills_sponsored,
@@ -755,7 +753,6 @@ export const typeDefs = `#graphql
             party: mp.party,
             riding: mp.riding,
             current: mp.current,
-            photo_url: mp.photo_url,
             email: mp.email,
             phone: mp.phone,
             updated_at: mp.updated_at
@@ -866,7 +863,6 @@ export const typeDefs = `#graphql
             party: mp.party,
             riding: mp.riding,
             current: mp.current,
-            photo_url: mp.photo_url,
             email: mp.email,
             phone: mp.phone,
             updated_at: mp.updated_at
@@ -996,46 +992,18 @@ export const typeDefs = `#graphql
       @cypher(
         statement: """
         MATCH (c:Committee {code: $committeeCode})
-
-        // Total meetings
-        OPTIONAL MATCH (c)-[:HELD_MEETING]->(m:Meeting)
-        WITH c, count(DISTINCT m) as total_meetings, collect(m) as all_meetings
-
-        // Recent meetings
-        WITH c, total_meetings,
-          size([m IN all_meetings WHERE duration.between(date(m.date), date()).days <= 30]) as meetings_30,
-          size([m IN all_meetings WHERE duration.between(date(m.date), date()).days <= 90]) as meetings_90
-
-        // Evidence documents
-        OPTIONAL MATCH (c)<-[:PRESENTED_TO]-(e:Document {document_type: 'E'})
-        WITH c, total_meetings, meetings_30, meetings_90, count(DISTINCT e) as evidence_docs
-
-        // Active bills
-        OPTIONAL MATCH (c)<-[:REFERRED_TO]-(b:Bill)
-        WHERE b.status IS NOT NULL AND b.status <> 'Passed'
-        WITH c, total_meetings, meetings_30, meetings_90, evidence_docs, count(DISTINCT b) as active_bills
-
-        // Member count
-        OPTIONAL MATCH (c)<-[:SERVES_ON]-(mp:MP)
-        WITH c, total_meetings, meetings_30, meetings_90, evidence_docs, active_bills, count(DISTINCT mp) as members
-
-        // Average statements per meeting
-        OPTIONAL MATCH (c)<-[:PRESENTED_TO]-(d:Document)<-[:PART_OF]-(s:Statement)
-        WITH c, total_meetings, meetings_30, meetings_90, evidence_docs, active_bills, members,
-             CASE WHEN evidence_docs > 0 THEN toFloat(count(s)) / evidence_docs ELSE 0.0 END as avg_statements
-
         RETURN {
           committee: c,
-          total_meetings: total_meetings,
-          meetings_last_30_days: meetings_30,
-          meetings_last_90_days: meetings_90,
-          total_evidence_documents: evidence_docs,
-          active_bills_count: active_bills,
-          member_count: members,
-          avg_statements_per_meeting: avg_statements
+          total_meetings: 0,
+          meetings_last_30_days: 0,
+          meetings_last_90_days: 0,
+          total_evidence_documents: 0,
+          active_bills_count: 0,
+          member_count: size((c)<-[:SERVES_ON]-()),
+          avg_statements_per_meeting: 0.0
         }
         """
-        columnName: "committee"
+        columnName: "committeeActivityMetrics"
       )
   }
 `;

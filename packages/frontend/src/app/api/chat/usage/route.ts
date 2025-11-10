@@ -11,6 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import type { UsageStats } from '@/lib/types/chat';
+import { auth } from '@/auth';
 
 function getSupabaseClient() {
   return createClient(
@@ -28,11 +29,11 @@ function getSupabaseClient() {
 export async function GET(request: Request) {
   const supabase = getSupabaseClient();
   try {
-    // Get user from Supabase auth
-    const authHeader = request.headers.get('authorization');
+    // Get user from NextAuth session
+    const session = await auth();
 
     // For development/unauthenticated users, return default stats
-    if (!authHeader) {
+    if (!session || !session.user) {
       const defaultResponse: UsageStats = {
         queries_today: 0,
         queries_this_month: 0,
@@ -43,46 +44,34 @@ export async function GET(request: Request) {
       return Response.json(defaultResponse);
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
-
-    if (authError || !user) {
-      // Return default stats instead of error for unauthenticated users
-      const defaultResponse: UsageStats = {
-        queries_today: 0,
-        queries_this_month: 0,
-        tokens_today: 0,
-        cost_today: 0,
-        overage_amount: 0,
-      };
-      return Response.json(defaultResponse);
-    }
+    const user = { id: session.user.id };
 
     // Get today's date
     const today = new Date().toISOString().split('T')[0];
 
-    // Get first day of current month
+    // Get first day of current month (UTC to match quota logic)
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().split('T')[0];
 
-    // Queries today
+    // Queries today (counted against quota)
     const { data: todayQueries } = await supabase
       .from('usage_logs')
       .select('tokens_total, cost_usd')
       .eq('user_id', user.id)
-      .eq('query_date', today);
+      .eq('query_date', today)
+      .eq('counted_against_quota', true);
 
     const queriesToday = todayQueries?.length || 0;
     const tokensToday = todayQueries?.reduce((sum, q) => sum + (q.tokens_total || 0), 0) || 0;
     const costToday = todayQueries?.reduce((sum, q) => sum + (q.cost_usd || 0), 0) || 0;
 
-    // Queries this month
+    // Queries this month (counted against quota)
     const { data: monthQueries } = await supabase
       .from('usage_logs')
       .select('id')
       .eq('user_id', user.id)
-      .gte('query_date', monthStart);
+      .gte('query_date', monthStart)
+      .eq('counted_against_quota', true);
 
     const queriesThisMonth = monthQueries?.length || 0;
 

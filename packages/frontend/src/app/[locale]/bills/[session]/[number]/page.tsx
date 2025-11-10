@@ -14,6 +14,7 @@ import { Loading } from '@/components/Loading';
 import { Card } from '@canadagpt/design-system';
 import { GET_BILL, GET_BILL_LOBBYING, GET_BILL_DEBATES } from '@/lib/queries';
 import { Link } from '@/i18n/navigation';
+import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 import { format } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 import { FileText, Users, ThumbsUp, ThumbsDown, Building, Calendar, CheckCircle, UserCheck, MessageSquare } from 'lucide-react';
@@ -385,30 +386,32 @@ export default function BillDetailPage({
                       )}
 
                       {/* Speaker */}
-                      {speech.madeBy && (
-                        <div className="flex items-center gap-3 mb-3">
-                          {speech.madeBy.photo_url && (
-                            <img
-                              src={speech.madeBy.photo_url
-                                .replace('polpics/', '/mp-photos/')
-                                .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1')}
-                              alt={speech.madeBy.name}
-                              className="w-10 h-10 rounded-full object-cover"
-                            />
-                          )}
-                          <div>
-                            <Link
-                              href={`/mps/${speech.madeBy.id}` as any}
-                              className="font-semibold text-text-primary hover:text-accent-red transition-colors"
-                            >
-                              {speech.madeBy.name}
-                            </Link>
-                            <div className="text-sm text-text-secondary">
-                              {speech.madeBy.party}
+                      {speech.madeBy && (() => {
+                        const photoUrl = getMPPhotoUrl(speech.madeBy);
+
+                        return (
+                          <div className="flex items-center gap-3 mb-3">
+                            {photoUrl && (
+                              <img
+                                src={photoUrl}
+                                alt={speech.madeBy.name}
+                                className="w-10 h-10 rounded-full object-cover"
+                              />
+                            )}
+                            <div>
+                              <Link
+                                href={`/mps/${speech.madeBy.id}` as any}
+                                className="font-semibold text-text-primary hover:text-accent-red transition-colors"
+                              >
+                                {speech.madeBy.name}
+                              </Link>
+                              <div className="text-sm text-text-secondary">
+                                {speech.madeBy.party}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Content */}
                       <p className="text-text-primary mb-3 whitespace-pre-line">

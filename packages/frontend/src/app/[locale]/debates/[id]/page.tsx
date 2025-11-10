@@ -13,6 +13,7 @@ import { Loading } from '@/components/Loading';
 import { Card, Button } from '@canadagpt/design-system';
 import { GET_HANSARD_DOCUMENT, GET_RECENT_DEBATES } from '@/lib/queries';
 import Link from 'next/link';
+import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 import {
   Calendar,
   FileText,
@@ -489,12 +490,8 @@ export default function DebatePage() {
               />
             ) : (
               filteredStatements.map((statement: Statement) => {
-                // Fix photo URL: convert polpics/ to /mp-photos/ and remove _suffix before extension
-                const photoUrl = statement.madeBy?.photo_url
-                  ? statement.madeBy.photo_url
-                      .replace('polpics/', '/mp-photos/')
-                      .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1')
-                  : null;
+                // Get photo URL from GCS or fallback to ID-based construction
+                const photoUrl = statement.madeBy ? getMPPhotoUrl(statement.madeBy) : null;
 
                 return (
                   <div

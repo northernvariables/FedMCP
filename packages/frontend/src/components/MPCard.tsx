@@ -13,6 +13,7 @@
 
 'use client';
 
+import React from 'react';
 import Image from 'next/image';
 import { Link } from '@/i18n/navigation';
 import { useTranslations, useLocale } from 'next-intl';
@@ -22,13 +23,13 @@ import { PartyLogo } from './PartyLogo';
 import { usePartyName } from '@/hooks/useBilingual';
 import { ShareButton } from './ShareButton';
 import { PrintableCard } from './PrintableCard';
+import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 
 export interface MPCardData {
   id: string;
   name: string;
   party?: string | null;
   riding?: string | null;
-  photo_url?: string | null;
   cabinet_position?: string | null;
 }
 
@@ -42,13 +43,10 @@ export function MPCard({ mp, linkToParty = true, className = '' }: MPCardProps) 
   const t = useTranslations('mps.card');
   const locale = useLocale();
   const partyName = usePartyName(mp.party);
+  const [imageError, setImageError] = React.useState(false);
 
-  // Fix photo URL: convert polpics/ to /mp-photos/ and remove _suffix before extension
-  const photoUrl = mp.photo_url
-    ? mp.photo_url
-        .replace('polpics/', '/mp-photos/')
-        .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1') // Remove _suffix before extension
-    : null;
+  // Get photo URL from GCS or fallback to ID-based construction
+  const photoUrl = getMPPhotoUrl(mp);
 
   // Share data
   const shareUrl = `/${locale}/mps/${mp.id}`;
@@ -82,13 +80,14 @@ export function MPCard({ mp, linkToParty = true, className = '' }: MPCardProps) 
 
         <div className="flex items-start space-x-4">
           {/* MP Photo */}
-          {photoUrl && (
+          {photoUrl && !imageError && (
             <Image
               src={photoUrl}
               alt={mp.name}
               width={60}
               height={96}
               className="w-[60px] h-24 rounded-lg object-contain flex-shrink-0 bg-bg-elevated"
+              onError={() => setImageError(true)}
             />
           )}
 
@@ -133,13 +132,10 @@ export interface CompactMPCardProps {
 
 export function CompactMPCard({ mp, linkToParty = true, className = '' }: CompactMPCardProps) {
   const t = useTranslations('mps.card');
+  const [imageError, setImageError] = React.useState(false);
 
-  // Fix photo URL: convert polpics/ to /mp-photos/ and remove _suffix before extension
-  const photoUrl = mp.photo_url
-    ? mp.photo_url
-        .replace('polpics/', '/mp-photos/')
-        .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1') // Remove _suffix before extension
-    : null;
+  // Get photo URL from GCS or fallback to ID-based construction
+  const photoUrl = getMPPhotoUrl(mp);
 
   return (
     <Link href={`/mps/${mp.id}` as any}>
@@ -154,13 +150,14 @@ export function CompactMPCard({ mp, linkToParty = true, className = '' }: Compac
         </div>
 
         {/* MP Photo */}
-        {photoUrl && (
+        {photoUrl && !imageError && (
           <Image
             src={photoUrl}
             alt={mp.name}
             width={300}
             height={384}
             className="w-full h-96 object-cover object-[50%_25%] rounded-md mb-2"
+            onError={() => setImageError(true)}
           />
         )}
 

@@ -4,7 +4,7 @@
 
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import React, { use, useEffect, useState } from 'react';
 import { useQuery } from '@apollo/client';
 import { useLocale } from 'next-intl';
 import { Header } from '@/components/Header';
@@ -18,6 +18,7 @@ import { Card } from '@canadagpt/design-system';
 import { GET_MP, GET_MP_SCORECARD, GET_MP_NEWS, GET_MP_SPEECHES } from '@/lib/queries';
 import Link from 'next/link';
 import { formatCAD } from '@canadagpt/design-system';
+import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 import { Mail, Phone, Twitter, MapPin, Award, FileText, TrendingUp, ExternalLink, Building2, Crown, BarChart3, Newspaper, CheckCircle2, XCircle, MinusCircle, Vote, MessageSquare, Calendar, Hash } from 'lucide-react';
 import { PartyLogo } from '@/components/PartyLogo';
 import { usePageThreading } from '@/contexts/UserPreferencesContext';
@@ -81,12 +82,9 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
     );
   }
 
-  // Fix photo URL: convert polpics/ to /mp-photos/ and remove _suffix before extension
-  const photoUrl = mp.photo_url
-    ? mp.photo_url
-        .replace('polpics/', '/mp-photos/')
-        .replace(/_[a-zA-Z0-9]+(\.\w+)$/, '$1') // Remove _suffix before extension
-    : null;
+  // Get photo URL from GCS or fallback to ID-based construction
+  const photoUrl = getMPPhotoUrl(mp);
+  const [imageError, setImageError] = React.useState(false);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -106,11 +104,12 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
           </div>
 
           <div className="flex items-start space-x-6 pr-12">
-            {photoUrl && (
+            {photoUrl && !imageError && (
               <img
                 src={photoUrl}
                 alt={mp.name}
                 className="w-[120px] h-48 rounded-xl object-contain bg-bg-elevated"
+                onError={() => setImageError(true)}
               />
             )}
             <div className="flex-1">

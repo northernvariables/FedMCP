@@ -20,9 +20,7 @@ const CONTEXT_PROMPTS: Record<ContextType, SuggestedPrompt[]> = {
     { label: 'Daily Summary', prompt: 'What happened in Parliament today? Give me a summary of the key activities and debates.' },
     { label: 'How Parliament Works', prompt: 'Explain the legislative process in Canada - how does a bill become a law?' },
     { label: 'Question Period', prompt: 'What is Question Period and how does it work in the House of Commons?' },
-    { label: 'Recent bills', prompt: 'What are the most recent bills introduced in Parliament?' },
     { label: 'Top spenders', prompt: 'Which MPs have the highest expenses this quarter?' },
-    { label: 'Active lobbying', prompt: 'What are the top lobbying issues right now?' },
   ],
   mp: [
     { label: 'Bills sponsored', prompt: 'What bills has this MP sponsored?' },
@@ -59,19 +57,24 @@ export function ChatSuggestions() {
   const { messages } = useChatMessages();
   const { sendMessage } = useChatInput();
 
-  // Only show suggestions when there are no messages yet
-  if (messages.length > 0) {
-    return null;
-  }
-
-  const prompts = CONTEXT_PROMPTS[contextType || 'general'];
+  // When there are messages, always show 'general' context suggestions
+  // When there are no messages, show context-specific suggestions
+  const effectiveContext = messages.length > 0 ? 'general' : (contextType || 'general');
+  const prompts = CONTEXT_PROMPTS[effectiveContext];
 
   const handleSuggestionClick = async (prompt: string) => {
-    await sendMessage(prompt);
+    console.log('[ChatSuggestions] Suggestion clicked:', prompt);
+    console.log('[ChatSuggestions] sendMessage function:', sendMessage);
+    try {
+      await sendMessage(prompt);
+      console.log('[ChatSuggestions] Message sent successfully');
+    } catch (error) {
+      console.error('[ChatSuggestions] Error sending message:', error);
+    }
   };
 
   return (
-    <div className="px-4 py-3 border-t border-gray-700 bg-gray-800">
+    <div className="flex-shrink-0 px-4 py-3 border-t border-gray-700 bg-gray-800">
       <div className="flex items-center gap-2 mb-2">
         <Sparkles className="w-4 h-4 text-accent-red" />
         <span className="text-xs font-medium text-gray-400">

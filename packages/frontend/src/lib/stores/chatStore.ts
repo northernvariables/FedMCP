@@ -30,6 +30,7 @@ const initialState: ChatState = {
   hasOpenAIKey: false,
   isOpen: false,
   isMinimized: false,
+  isExpanded: false,
   contextType: undefined,
   contextId: undefined,
   contextData: undefined,
@@ -45,23 +46,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setConversation: (conversation) => set({ conversation }),
 
   createConversation: async (context) => {
+    console.log('[chatStore] createConversation called with context:', context);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        set({ error: 'You must be logged in to start a conversation' });
-        return;
-      }
-
       // Check quota before creating conversation
+      console.log('[chatStore] Checking quota before creating conversation');
       const quotaCheck = await get().checkQuota();
+      console.log('[chatStore] Quota check for create:', quotaCheck);
       if (!quotaCheck.can_query && !quotaCheck.requires_payment) {
+        console.error('[chatStore] Quota check failed for create:', quotaCheck.reason);
         set({ error: quotaCheck.reason });
         return;
       }
 
       // Calculate expiration based on tier
       const subscription = get().subscription;
+      console.log('[chatStore] Subscription:', subscription);
       let expires_at: string | undefined;
 
       if (subscription) {
@@ -78,24 +77,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
       }
 
-      const { data, error } = await supabase
-        .from('conversations')
-        .insert({
-          user_id: user.id,
+      console.log('[chatStore] Creating conversation via API');
+      const response = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           title: context?.data?.name || 'New conversation',
           context_type: context?.type,
           context_id: context?.id,
           context_data: context?.data,
           expires_at,
-        })
-        .select()
-        .single();
+        }),
+      });
 
-      if (error) {
-        set({ error: `Failed to create conversation: ${error.message}` });
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[chatStore] API error:', errorData);
+        set({ error: errorData.error || 'Failed to create conversation' });
         return;
       }
 
+      const data = await response.json();
+      console.log('[chatStore] Conversation created successfully:', data);
       set({
         conversation: data,
         messages: [],
@@ -104,6 +109,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         contextData: context?.data,
       });
     } catch (err) {
+      console.error('[chatStore] Unexpected error in createConversation:', err);
       set({ error: `Unexpected error: ${err}` });
     }
   },
@@ -183,19 +189,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   sendMessage: async (content) => {
+    console.log('[chatStore] sendMessage called with:', content);
     const state = get();
 
     // Check if we have a conversation
     if (!state.conversation) {
+      console.log('[chatStore] No conversation, creating one');
       await get().createConversation();
 
       // If creation failed, don't continue
       if (!get().conversation) {
+        console.error('[chatStore] Failed to create conversation');
         return;
       }
     }
 
     try {
+      console.log('[chatStore] Setting loading state');
       set({ isLoading: true, error: null });
 
       // Add user message to UI immediately
@@ -208,12 +218,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         created_at: new Date().toISOString(),
       };
 
+      console.log('[chatStore] Adding user message to UI');
       get().addMessage(userMessage);
       set({ input: '' });
 
       // Check quota
+      console.log('[chatStore] Checking quota');
       const quotaCheck = await get().checkQuota();
+      console.log('[chatStore] Quota check result:', quotaCheck);
       if (!quotaCheck.can_query) {
+        console.error('[chatStore] Quota check failed:', quotaCheck.reason);
         set({
           error: quotaCheck.reason,
           isLoading: false,
@@ -221,7 +235,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         return;
       }
 
-      // Send to API
+      // Send to API (NextAuth handles authentication via HTTP-only cookies)
+      console.log('[chatStore] Sending message to API');
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -238,17 +253,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }),
       });
 
+      console.log('[chatStore] API response status:', response.status, response.statusText);
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('[chatStore] API error:', errorData);
         throw new Error(errorData.error || 'Failed to send message');
       }
 
       // Handle streaming response
+      console.log('[chatStore] Starting to handle streaming response');
       const reader = response.body?.getReader();
       if (!reader) {
+        console.error('[chatStore] No response body found');
         throw new Error('No response body');
       }
 
+      console.log('[chatStore] Creating assistant message placeholder');
       let assistantMessage: Message = {
         id: crypto.randomUUID(),
         conversation_id: state.conversation!.id,
@@ -258,6 +278,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         created_at: new Date().toISOString(),
       };
 
+      console.log('[chatStore] Adding assistant message to UI');
       get().addMessage(assistantMessage);
 
       const decoder = new TextDecoder();
@@ -284,10 +305,40 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             try {
               const parsed = JSON.parse(data);
 
+              // Handle errors from streaming
+              if (parsed.error) {
+                console.error('[chatStore] Streaming error:', parsed.error);
+                assistantMessage.content = `Error: ${parsed.error}`;
+                set((state) => ({
+                  messages: state.messages.map((msg) =>
+                    msg.id === assistantMessage.id
+                      ? { ...assistantMessage }
+                      : msg
+                  ),
+                  error: parsed.error,
+                  isLoading: false,
+                }));
+                break;
+              }
+
               if (parsed.content) {
                 assistantMessage.content += parsed.content;
 
                 // Update message in state
+                set((state) => ({
+                  messages: state.messages.map((msg) =>
+                    msg.id === assistantMessage.id
+                      ? { ...assistantMessage }
+                      : msg
+                  ),
+                }));
+              }
+
+              // Capture navigation data if provided
+              if (parsed.navigation) {
+                assistantMessage.navigation = parsed.navigation;
+
+                // Update message in state with navigation
                 set((state) => ({
                   messages: state.messages.map((msg) =>
                     msg.id === assistantMessage.id
@@ -309,7 +360,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       set({ isLoading: false });
 
-      // Refresh usage stats after successful query
+      // Refresh quota and usage stats after successful query
+      await get().checkQuota();
       await get().refreshUsageStats();
 
     } catch (err) {
@@ -336,30 +388,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   checkQuota: async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        return {
-          can_query: false,
-          reason: 'You must be logged in',
-          requires_payment: false,
-        };
-      }
-
+      // NextAuth handles authentication via HTTP-only cookies
       const response = await fetch('/api/chat/quota', {
         method: 'GET',
       });
 
       if (!response.ok) {
-        throw new Error('Failed to check quota');
+        const errorText = await response.text();
+        console.error('[chatStore] Quota API error:', response.status, errorText);
+        throw new Error(`Failed to check quota: ${response.status} ${errorText}`);
       }
 
       const quotaStatus: QuotaCheckResult = await response.json();
+      console.log('[chatStore] Quota status:', quotaStatus);
       set({ quotaStatus });
 
       return quotaStatus;
     } catch (err) {
-      console.error('Failed to check quota:', err);
+      console.error('[chatStore] Failed to check quota:', err);
       return {
         can_query: false,
         reason: 'Failed to check quota',
@@ -398,6 +444,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   toggleOpen: () => set((state) => ({ isOpen: !state.isOpen })),
   toggleMinimize: () => set((state) => ({ isMinimized: !state.isMinimized })),
+  toggleExpanded: () => set((state) => ({ isExpanded: !state.isExpanded })),
 
   // ============================================
   // Context
@@ -434,6 +481,12 @@ export const useChatOpen = () => {
   const isOpen = useChatStore((state) => state.isOpen);
   const toggleOpen = useChatStore((state) => state.toggleOpen);
   return [isOpen, toggleOpen] as const;
+};
+
+export const useChatExpanded = () => {
+  const isExpanded = useChatStore((state) => state.isExpanded);
+  const toggleExpanded = useChatStore((state) => state.toggleExpanded);
+  return [isExpanded, toggleExpanded] as const;
 };
 
 export const useChatMessages = () => {

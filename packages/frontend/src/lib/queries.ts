@@ -15,7 +15,6 @@ export const MP_BASIC_FRAGMENT = gql`
     party
     riding
     current
-    photo_url
     cabinet_position
   }
 `;
@@ -27,7 +26,6 @@ export const MP_SEATING_FRAGMENT = gql`
     party
     riding
     current
-    photo_url
     cabinet_position
     parl_mp_id
     seat_row
@@ -41,8 +39,6 @@ export const MP_SEATING_FRAGMENT = gql`
 export const MP_FULL_FRAGMENT = gql`
   fragment MPFull on MP {
     ...MPBasic
-    given_name
-    family_name
     gender
     elected_date
     email
@@ -451,7 +447,6 @@ export const GET_COMMITTEE = gql`
         name
         party
         riding
-        photo_url
         cabinet_position
         servedOnConnection(where: { node: { code: $code } }) {
           edges {
@@ -501,7 +496,6 @@ export const GET_COMMITTEE_TESTIMONY = gql`
         id
         name
         party
-        photo_url
       }
       partOf {
         id
@@ -559,7 +553,6 @@ export const GET_BILL_DEBATES = gql`
         id
         name
         party
-        photo_url
       }
       mentionsConnection {
         edges {
@@ -581,13 +574,17 @@ export const SEARCH_HANSARD = gql`
         id
         name
         party
-        photo_url
       }
       partOf {
         id
         date
         document_type
         session_id
+        presentedTo {
+          code
+          name
+          chamber
+        }
       }
     }
   }
@@ -609,8 +606,7 @@ export const GET_HANSARD_DOCUMENT = gql`
           id
           name
           party
-          photo_url
-        }
+          }
       }
     }
   }

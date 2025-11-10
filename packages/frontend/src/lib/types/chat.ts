@@ -104,6 +104,12 @@ export interface Message {
   // Cost tracking
   cost_usd?: number;
 
+  // Navigation (for tool-triggered page navigation)
+  navigation?: {
+    url: string;
+    message: string;
+  };
+
   created_at: string;
 }
 
@@ -205,6 +211,7 @@ export interface ChatState {
   // UI state
   isOpen: boolean;
   isMinimized: boolean;
+  isExpanded: boolean;
 
   // Context
   contextType?: ContextType;
@@ -241,6 +248,7 @@ export interface ChatActions {
   // UI state
   toggleOpen: () => void;
   toggleMinimize: () => void;
+  toggleExpanded: () => void;
 
   // Context
   setContext: (type?: ContextType, id?: string, data?: Record<string, any>) => void;

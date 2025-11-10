@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { ArrowDown, Loader2 } from 'lucide-react';
+import { MapleLeafIcon } from '@canadagpt/design-system';
 import { ChatMessage } from './ChatMessage';
 import { useChatMessages } from '@/lib/stores/chatStore';
 
@@ -49,44 +50,18 @@ export function ChatHistory() {
     }
   };
 
-  // Empty state
+  // Empty state - just return empty container, welcome message will appear
   if (messages.length === 0 && !isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="text-center max-w-md">
-          <div className="w-16 h-16 bg-accent-red/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-8 h-8 text-accent-red"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-              />
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-white mb-2">
-            Start a conversation
-          </h3>
-          <p className="text-sm text-gray-400">
-            Ask me anything about Canadian federal politics, MPs, bills, lobbying, or government spending.
-          </p>
-        </div>
-      </div>
-    );
+    return <div className="flex-1 relative overflow-hidden" />;
   }
 
   return (
-    <div className="flex-1 relative">
+    <div className="flex-1 relative overflow-hidden">
       {/* Messages container */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="h-full overflow-y-auto px-4 py-6 space-y-4"
+        className="absolute inset-0 overflow-y-auto px-4 py-6 space-y-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
         style={{ scrollBehavior: 'smooth' }}
       >
         {messages.map((message) => (
@@ -96,8 +71,8 @@ export function ChatHistory() {
         {/* Loading indicator (streaming message) */}
         {isLoading && (
           <div className="flex gap-3 mb-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-sm font-medium text-gray-300">
-              AI
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-white">
+              <MapleLeafIcon className="w-5 h-5" size={20} />
             </div>
             <div className="flex-1 max-w-[80%]">
               <div className="rounded-lg px-4 py-3 bg-gray-800 border border-gray-700">

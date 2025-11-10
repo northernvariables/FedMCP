@@ -134,7 +134,6 @@ def ingest_mps(neo4j_client: Neo4jClient, batch_size: int = 10000) -> int:
                 "riding": riding_name,
                 "current": mp_summary.get("current", True),
                 "elected_date": mp_summary.get("elected"),
-                "photo_url": mp_data.get("image"),
                 "email": mp_data.get("email"),
                 "phone": mp_data.get("voice"),
                 "twitter": twitter_handle,

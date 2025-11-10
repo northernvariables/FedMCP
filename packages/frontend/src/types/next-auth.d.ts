@@ -14,8 +14,10 @@ declare module 'next-auth' {
       email: string;
       name?: string | null;
       image?: string | null;
-      subscriptionTier?: string;
-      monthlyUsage?: number;
+      subscriptionTier: string;
+      monthlyUsage: number;
+      createdAt?: string;
+      usageResetDate?: string;
       linkedProviders?: string[];
     };
   }
@@ -33,6 +35,8 @@ declare module 'next-auth/jwt' {
     id?: string;
     subscriptionTier?: string;
     monthlyUsage?: number;
+    createdAt?: string;
+    usageResetDate?: string;
     linkedProviders?: string[];
   }
 }

@@ -10,6 +10,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import type { QuotaCheckResult } from '@/lib/types/chat';
+import { auth } from '@/auth';
 
 function getSupabaseClient() {
   return createClient(
@@ -27,11 +28,11 @@ function getSupabaseClient() {
 export async function GET(request: Request) {
   const supabase = getSupabaseClient();
   try {
-    // Get user from Supabase auth
-    const authHeader = request.headers.get('authorization');
+    // Get user from NextAuth session
+    const session = await auth();
 
     // For development/unauthenticated users, return unlimited quota
-    if (!authHeader) {
+    if (!session || !session.user) {
       const defaultResponse: QuotaCheckResult = {
         can_query: true,
         reason: 'Development mode - unlimited queries',
@@ -42,20 +43,20 @@ export async function GET(request: Request) {
       return Response.json(defaultResponse);
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    const user = { id: session.user.id };
 
-    if (authError || !user) {
-      // Return unlimited quota for unauthenticated users in development
-      const defaultResponse: QuotaCheckResult = {
-        can_query: true,
-        reason: 'Development mode - unlimited queries',
+    // First verify the user exists in auth.users
+    const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(user.id);
+
+    if (authError || !authUser.user) {
+      console.warn('User not found in auth.users:', user.id, '- Session may be stale. Please sign out and sign in again.');
+      return Response.json({
+        can_query: false,
+        reason: 'Session expired. Please sign out and sign in again.',
         requires_payment: false,
-        queries_remaining: undefined,
+        queries_remaining: 0,
         resets_at: undefined,
-      };
-      return Response.json(defaultResponse);
+      });
     }
 
     // Check quota using PostgreSQL function
@@ -65,51 +66,97 @@ export async function GET(request: Request) {
     );
 
     if (quotaError) {
-      console.error('Quota check error:', quotaError);
-      return Response.json(
-        { error: 'Failed to check quota' },
-        { status: 500 }
-      );
+      console.error('Quota check error for user', user.id, ':', quotaError);
+      // If the error is due to missing user record, return helpful message
+      if (quotaError.message?.includes('violates foreign key constraint')) {
+        return Response.json({
+          can_query: false,
+          reason: 'Account setup incomplete. Please sign out and sign in again.',
+          requires_payment: false,
+          queries_remaining: 0,
+          resets_at: undefined,
+        });
+      }
+      // For development, allow queries on other errors
+      console.log('Allowing query despite quota check error (development mode)');
+      return Response.json({
+        can_query: true,
+        reason: 'Development mode - quota check failed but allowing query',
+        requires_payment: false,
+        queries_remaining: undefined,
+        resets_at: undefined,
+      });
     }
 
-    const result = quotaResult[0];
+    // Handle case where user doesn't exist or function returns null/undefined
+    // Note: PostgreSQL function with OUT parameters returns a single object, not an array
+    const result = quotaResult;
 
-    // Get subscription details for additional context
-    const { data: subscription } = await supabase
+    if (!result || result.can_query === undefined || result.can_query === null) {
+      console.log('No quota result for user:', user.id, '- allowing unlimited queries for development');
+      return Response.json({
+        can_query: true,
+        reason: 'Development mode - unlimited queries',
+        requires_payment: false,
+        queries_remaining: undefined,
+        resets_at: undefined,
+      });
+    }
+
+    // Get subscription details for additional context (gracefully handle missing subscription)
+    const { data: subscription, error: subError } = await supabase
       .from('user_subscriptions')
       .select('*')
       .eq('user_id', user.id)
       .single();
 
-    // Get today's usage
-    const today = new Date().toISOString().split('T')[0];
-    const { data: todayUsage } = await supabase
+    if (subError && subError.code !== 'PGRST116') {
+      // Log error but continue (PGRST116 = not found, which is OK)
+      console.error('Error fetching subscription for user', user.id, ':', subError);
+    }
+
+    // Get lifetime usage (gracefully handle errors)
+    const { data: lifetimeUsage, error: usageError } = await supabase
       .from('usage_logs')
       .select('id')
       .eq('user_id', user.id)
-      .eq('query_date', today)
       .eq('counted_against_quota', true);
 
-    const queriesUsedToday = todayUsage?.length || 0;
+    if (usageError) {
+      console.error('Error fetching usage for user', user.id, ':', usageError);
+    }
+
+    const queriesUsedLifetime = lifetimeUsage?.length || 0;
 
     // Calculate queries remaining
     let queriesRemaining: number | undefined;
     if (subscription) {
       if (subscription.tier === 'free') {
-        // Free tier uses lifetime quota
-        queriesRemaining = Math.max(0, (subscription.lifetime_quota || 0) - queriesUsedToday);
+        // Free tier: 10 queries lifetime
+        const lifetimeQuota = subscription.lifetime_quota || 10;
+        queriesRemaining = Math.max(0, lifetimeQuota - queriesUsedLifetime);
       } else {
-        // Paid tiers use daily quota
-        queriesRemaining = Math.max(0, subscription.daily_quota - queriesUsedToday);
+        // Paid tiers use daily quota - check today's usage
+        const today = new Date().toISOString().split('T')[0];
+        const { data: todayUsage } = await supabase
+          .from('usage_logs')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('query_date', today)
+          .eq('counted_against_quota', true);
+
+        const queriesToday = todayUsage?.length || 0;
+        queriesRemaining = Math.max(0, subscription.daily_quota - queriesToday);
       }
     }
 
-    // Calculate reset time (midnight UTC for daily quotas)
+    // Reset time is undefined for free tier (no reset)
     let resetsAt: string | undefined;
     if (subscription && subscription.tier !== 'free') {
+      // Paid tiers reset daily
       const tomorrow = new Date();
-      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-      tomorrow.setUTCHours(0, 0, 0, 0);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
       resetsAt = tomorrow.toISOString();
     }
 
@@ -124,9 +171,14 @@ export async function GET(request: Request) {
     return Response.json(response);
   } catch (error) {
     console.error('Quota API error:', error);
-    return Response.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
+    // In development, allow queries even on unexpected errors
+    console.log('Allowing query despite unexpected error (development mode)');
+    return Response.json({
+      can_query: true,
+      reason: 'Development mode - error occurred but allowing query',
+      requires_payment: false,
+      queries_remaining: undefined,
+      resets_at: undefined,
+    });
   }
 }

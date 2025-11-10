@@ -131,6 +131,29 @@ export function validateApiKeyFormat(provider: 'anthropic' | 'openai' | 'canlii'
 }
 
 /**
+ * Encrypt an OAuth token for secure storage
+ * Returns a single combined string with format: iv:tag:encrypted
+ *
+ * @param plaintext - The token to encrypt
+ * @returns Combined encrypted string
+ */
+export function encryptToken(plaintext: string): string {
+  const { encrypted, iv, tag } = encryptApiKey(plaintext);
+  return `${iv}:${tag}:${encrypted}`;
+}
+
+/**
+ * Decrypt an encrypted OAuth token
+ *
+ * @param combined - The combined encrypted string (iv:tag:encrypted)
+ * @returns The decrypted token
+ */
+export function decryptToken(combined: string): string {
+  const [iv, tag, encrypted] = combined.split(':');
+  return decryptApiKey(encrypted, iv, tag);
+}
+
+/**
  * Generate a secure encryption key (for setup purposes)
  * Run this once and save the output to your .env file
  *

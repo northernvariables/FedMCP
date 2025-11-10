@@ -31,9 +31,14 @@ export function ChatInput() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[ChatInput] handleSubmit called', { input, isLoading });
 
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading) {
+      console.log('[ChatInput] Submit blocked - empty input or loading');
+      return;
+    }
 
+    console.log('[ChatInput] Sending message:', input);
     await sendMessage(input);
 
     // Reset textarea height after sending
@@ -54,7 +59,7 @@ export function ChatInput() {
   const isNearLimit = remainingChars < 100;
 
   return (
-    <form onSubmit={handleSubmit} className="p-4">
+    <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-gray-700 bg-gray-900">
       <div className="flex gap-2">
         {/* Textarea */}
         <div className="flex-1 relative">
@@ -68,11 +73,11 @@ export function ChatInput() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder=""
+            placeholder="Ask about Parliament, MPs, bills..."
             disabled={isLoading}
             maxLength={MAX_LENGTH}
             rows={1}
-            className={`w-full resize-none rounded-lg pl-10 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-accent-red font-mono bg-transparent border-0 caret-white ${
+            className={`w-full resize-none rounded-lg pl-10 py-3 pr-16 text-sm focus:outline-none focus:ring-1 focus:ring-accent-red font-mono bg-gray-800 border-0 caret-white placeholder-gray-500 overflow-hidden ${
               isLoading
                 ? 'cursor-not-allowed opacity-60 text-gray-400'
                 : 'text-white'

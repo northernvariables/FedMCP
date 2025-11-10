@@ -94,6 +94,25 @@ export default function SettingsPage() {
     skip: !mpSearchTerm || mpSearchTerm.length < 2
   });
 
+  // Fetch API keys on mount - MUST be before early returns
+  useEffect(() => {
+    const fetchApiKeys = async () => {
+      try {
+        const response = await fetch('/api/user/api-keys');
+        if (response.ok) {
+          const data = await response.json();
+          setApiKeys(data.keys || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch API keys:', error);
+      }
+    };
+
+    if (user) {
+      fetchApiKeys();
+    }
+  }, [user]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -186,25 +205,6 @@ export default function SettingsPage() {
     router.push(`/${newLanguage}${pathWithoutLocale || '/'}`);
   };
 
-  // Fetch API keys on mount
-  useEffect(() => {
-    const fetchApiKeys = async () => {
-      try {
-        const response = await fetch('/api/user/api-keys');
-        if (response.ok) {
-          const data = await response.json();
-          setApiKeys(data.keys || []);
-        }
-      } catch (error) {
-        console.error('Failed to fetch API keys:', error);
-      }
-    };
-
-    if (user) {
-      fetchApiKeys();
-    }
-  }, [user]);
-
   // Save API key
   const handleSaveApiKey = async (provider: 'anthropic' | 'openai' | 'canlii') => {
     const apiKey = apiKeyInputs[provider];
@@ -251,6 +251,11 @@ export default function SettingsPage() {
 
       setApiKeySuccess({ ...apiKeySuccess, [provider]: 'API key saved successfully!' });
       setApiKeyInputs({ ...apiKeyInputs, [provider]: '' }); // Clear input
+
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setApiKeySuccess(prev => ({ ...prev, [provider]: '' }));
+      }, 5000);
     } catch (error: any) {
       setApiKeyErrors({ ...apiKeyErrors, [provider]: error.message });
     } finally {
@@ -334,25 +339,27 @@ export default function SettingsPage() {
     }
   };
 
-  const tierColors = {
+  const tierColors: Record<string, string> = {
     FREE: 'bg-gray-100 text-gray-800 border-gray-300',
     BASIC: 'bg-blue-100 text-blue-800 border-blue-300',
     PRO: 'bg-purple-100 text-purple-800 border-purple-300',
   };
 
-  const tierNames = {
+  const tierNames: Record<string, string> = {
     FREE: 'Free Plan',
     BASIC: 'Basic Plan',
     PRO: 'Pro Plan',
   };
 
-  const limits = {
+  const limits: Record<string, number> = {
     FREE: 10,
     BASIC: 200,
     PRO: 1000,
   };
 
-  const limit = limits[profile.subscription_tier];
+  // Safely get subscription tier with fallback to FREE
+  const subscriptionTier = profile.subscription_tier || 'FREE';
+  const limit = limits[subscriptionTier] || limits['FREE'];
   const usage = profile.monthly_usage || 0;
   const remaining = Math.max(0, limit - usage);
   const usagePercentage = (usage / limit) * 100;
@@ -750,8 +757,8 @@ export default function SettingsPage() {
                 {/* Current Tier */}
                 <div className="mb-6">
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Current Plan</h3>
-                  <div className={`inline-block px-3 py-1 rounded-full border ${tierColors[profile.subscription_tier]}`}>
-                    {tierNames[profile.subscription_tier]}
+                  <div className={`inline-block px-3 py-1 rounded-full border ${tierColors[subscriptionTier]}`}>
+                    {tierNames[subscriptionTier]}
                   </div>
                 </div>
 
@@ -779,7 +786,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                {profile.subscription_tier === 'FREE' && (
+                {subscriptionTier === 'FREE' && (
                   <div className="mt-6 pt-6 border-t border-gray-200">
                     <Link
                       href="/pricing"
@@ -801,15 +808,15 @@ export default function SettingsPage() {
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="text-lg font-medium text-gray-900">
-                        {tierNames[profile.subscription_tier]}
+                        {tierNames[subscriptionTier]}
                       </h3>
                       <p className="text-gray-600 mt-1">
-                        {profile.subscription_tier === 'FREE' && '10 queries per day'}
-                        {profile.subscription_tier === 'BASIC' && '200 queries per month - $6.99/month'}
-                        {profile.subscription_tier === 'PRO' && '1000 queries per month + MCP access - $29.99/month'}
+                        {subscriptionTier === 'FREE' && '10 queries per day'}
+                        {subscriptionTier === 'BASIC' && '200 queries per month - $6.99/month'}
+                        {subscriptionTier === 'PRO' && '1000 queries per month + MCP access - $29.99/month'}
                       </p>
                     </div>
-                    {profile.subscription_tier === 'FREE' && (
+                    {subscriptionTier === 'FREE' && (
                       <Link
                         href="/pricing"
                         className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -830,7 +837,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                {profile.subscription_tier !== 'FREE' && (
+                {subscriptionTier !== 'FREE' && (
                   <div className="pt-4 border-t border-gray-200">
                     <button className="text-red-600 hover:text-red-700 text-sm font-medium">
                       Cancel Subscription
@@ -925,6 +932,18 @@ export default function SettingsPage() {
                     </a>
                   </p>
 
+                  {/* Success/Error messages - shown for all states */}
+                  {apiKeyErrors.anthropic && (
+                    <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-sm text-red-800">{apiKeyErrors.anthropic}</p>
+                    </div>
+                  )}
+                  {apiKeySuccess.anthropic && (
+                    <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm text-green-800">{apiKeySuccess.anthropic}</p>
+                    </div>
+                  )}
+
                   {apiKeys.find((k) => k.provider === 'anthropic' && k.is_active) ? (
                     <div className="space-y-3">
                       <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
@@ -958,12 +977,6 @@ export default function SettingsPage() {
                         {apiKeyLoading.anthropic && <Loader2 className="w-4 h-4 animate-spin" />}
                         {apiKeyLoading.anthropic ? 'Validating...' : 'Save & Test'}
                       </button>
-                      {apiKeyErrors.anthropic && (
-                        <p className="text-sm text-red-600">{apiKeyErrors.anthropic}</p>
-                      )}
-                      {apiKeySuccess.anthropic && (
-                        <p className="text-sm text-green-600">{apiKeySuccess.anthropic}</p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -985,6 +998,18 @@ export default function SettingsPage() {
                       OpenAI Platform
                     </a>
                   </p>
+
+                  {/* Success/Error messages - shown for all states */}
+                  {apiKeyErrors.openai && (
+                    <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-sm text-red-800">{apiKeyErrors.openai}</p>
+                    </div>
+                  )}
+                  {apiKeySuccess.openai && (
+                    <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm text-green-800">{apiKeySuccess.openai}</p>
+                    </div>
+                  )}
 
                   {apiKeys.find((k) => k.provider === 'openai' && k.is_active) ? (
                     <div className="space-y-3">
@@ -1019,12 +1044,6 @@ export default function SettingsPage() {
                         {apiKeyLoading.openai && <Loader2 className="w-4 h-4 animate-spin" />}
                         {apiKeyLoading.openai ? 'Validating...' : 'Save & Test'}
                       </button>
-                      {apiKeyErrors.openai && (
-                        <p className="text-sm text-red-600">{apiKeyErrors.openai}</p>
-                      )}
-                      {apiKeySuccess.openai && (
-                        <p className="text-sm text-green-600">{apiKeySuccess.openai}</p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -1046,6 +1065,18 @@ export default function SettingsPage() {
                       CanLII Feedback Form
                     </a>
                   </p>
+
+                  {/* Success/Error messages - shown for all states */}
+                  {apiKeyErrors.canlii && (
+                    <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-sm text-red-800">{apiKeyErrors.canlii}</p>
+                    </div>
+                  )}
+                  {apiKeySuccess.canlii && (
+                    <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm text-green-800">{apiKeySuccess.canlii}</p>
+                    </div>
+                  )}
 
                   {apiKeys.find((k) => k.provider === 'canlii' && k.is_active) ? (
                     <div className="space-y-3">
@@ -1080,12 +1111,6 @@ export default function SettingsPage() {
                         {apiKeyLoading.canlii && <Loader2 className="w-4 h-4 animate-spin" />}
                         {apiKeyLoading.canlii ? 'Validating...' : 'Save & Test'}
                       </button>
-                      {apiKeyErrors.canlii && (
-                        <p className="text-sm text-red-600">{apiKeyErrors.canlii}</p>
-                      )}
-                      {apiKeySuccess.canlii && (
-                        <p className="text-sm text-green-600">{apiKeySuccess.canlii}</p>
-                      )}
                     </div>
                   )}
                 </div>

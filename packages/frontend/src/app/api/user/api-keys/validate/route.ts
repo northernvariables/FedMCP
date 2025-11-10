@@ -5,8 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { auth } from '@/auth';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
@@ -34,9 +33,9 @@ async function validateAnthropicKey(apiKey: string): Promise<{ valid: boolean; e
 
     // Make a minimal test request
     const response = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5',
       max_tokens: 10,
-      messages: [{ role: 'user', content: 'test' }],
+      messages: [{ role: 'user', content: 'Hi' }],
     });
 
     return { valid: true };
@@ -108,7 +107,7 @@ async function validateCanLIIKey(apiKey: string): Promise<{ valid: boolean; erro
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

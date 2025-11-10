@@ -15,7 +15,8 @@ import { ApolloWrapper } from '@/components/ApolloWrapper';
 import { SessionProvider } from '@/components/providers/SessionProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { UserPreferencesProvider } from '@/contexts/UserPreferencesContext';
-import { ChatWidget } from '@/components/chat';
+import { ChatWidgetWrapper } from '@/components/chat';
+import { ContentWrapper } from '@/components/ContentWrapper';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { locales } from '@/i18n/config';
 import '../globals.css';
@@ -102,8 +103,10 @@ export default async function LocaleLayout({ children, params }: Props) {
               <AuthProvider>
                 <UserPreferencesProvider>
                   <ApolloWrapper>
-                    {children}
-                    <ChatWidget />
+                    <ContentWrapper>
+                      {children}
+                    </ContentWrapper>
+                    <ChatWidgetWrapper />
                   </ApolloWrapper>
                 </UserPreferencesProvider>
               </AuthProvider>

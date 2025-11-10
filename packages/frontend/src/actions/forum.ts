@@ -5,7 +5,8 @@
  * Next.js Server Actions for forum CRUD operations
  */
 
-import { createServerClient } from '@/lib/supabase-server';
+import { createServerClient, createAdminClient } from '@/lib/supabase-server';
+import { auth } from '@/auth';
 import type {
   ForumPost,
   ForumCategory,
@@ -148,9 +149,7 @@ export async function getPosts(
 export async function getPost(postId: string): Promise<ApiResponse<ForumPost>> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
     const { data, error } = await supabase
       .from('forum_posts')
@@ -162,12 +161,12 @@ export async function getPost(postId: string): Promise<ApiResponse<ForumPost>> {
     if (!data) throw new Error('Post not found');
 
     // Get user's vote if authenticated
-    if (user) {
+    if (session?.user?.id) {
       const { data: voteData } = await supabase
         .from('forum_votes')
         .select('vote_type')
         .eq('post_id', postId)
-        .eq('user_id', user.id)
+        .eq('user_id', session.user.id)
         .maybeSingle();
 
       if (voteData) {
@@ -191,9 +190,7 @@ export async function getPostThread(
 ): Promise<ApiResponse<ForumPost[]>> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
     // Get the root post
     const rootPost = await getPost(postId);
@@ -214,12 +211,12 @@ export async function getPostThread(
     if (error) throw error;
 
     // Get user votes if authenticated
-    if (user && data) {
+    if (session?.user?.id && data) {
       const postIds = data.map((p) => p.id);
       const { data: votes } = await supabase
         .from('forum_votes')
         .select('post_id, vote_type')
-        .eq('user_id', user.id)
+        .eq('user_id', session.user.id)
         .in('post_id', postIds);
 
       if (votes) {
@@ -280,19 +277,19 @@ export async function createPost(
 ): Promise<ApiResponse<ForumPost>> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('You must be logged in to create a post');
     }
+
+    const userId = session.user.id;
 
     // Get user profile for denormalized data
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('display_name, avatar_url')
-      .eq('id', user.id)
+      .eq('id', userId)
       .maybeSingle();
 
     // Calculate depth and thread_root_id for replies
@@ -340,7 +337,7 @@ export async function createPost(
 
     // Check rate limit
     const { data: canPost } = await supabase.rpc('check_post_rate_limit', {
-      p_user_id: user.id,
+      p_user_id: userId,
     });
 
     if (canPost === false) {
@@ -353,8 +350,8 @@ export async function createPost(
     const postData: any = {
       post_type: input.post_type,
       content: input.content,
-      author_id: user.id,
-      author_name: profile?.display_name || user.email?.split('@')[0] || 'Anonymous',
+      author_id: userId,
+      author_name: profile?.display_name || session.user.email?.split('@')[0] || 'Anonymous',
       author_avatar_url: profile?.avatar_url,
       depth,
       thread_root_id,
@@ -394,13 +391,13 @@ export async function updatePost(
 ): Promise<ApiResponse<ForumPost>> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('You must be logged in to update a post');
     }
+
+    const userId = session.user.id;
 
     // Check ownership
     const { data: post } = await supabase
@@ -413,7 +410,7 @@ export async function updatePost(
       throw new Error('Post not found');
     }
 
-    if (post.author_id !== user.id) {
+    if (post.author_id !== userId) {
       throw new Error('You can only edit your own posts');
     }
 
@@ -448,13 +445,13 @@ export async function updatePost(
 export async function deletePost(postId: string): Promise<ApiResponse> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('You must be logged in to delete a post');
     }
+
+    const userId = session.user.id;
 
     // Check ownership
     const { data: post } = await supabase
@@ -467,7 +464,7 @@ export async function deletePost(postId: string): Promise<ApiResponse> {
       throw new Error('Post not found');
     }
 
-    if (post.author_id !== user.id) {
+    if (post.author_id !== userId) {
       throw new Error('You can only delete your own posts');
     }
 
@@ -477,7 +474,7 @@ export async function deletePost(postId: string): Promise<ApiResponse> {
       .update({
         is_deleted: true,
         deleted_at: new Date().toISOString(),
-        deleted_by: user.id,
+        deleted_by: userId,
       })
       .eq('id', postId);
 
@@ -503,13 +500,13 @@ export async function votePost(
 ): Promise<ApiResponse<{ upvotes: number; downvotes: number }>> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('You must be logged in to vote');
     }
+
+    const userId = session.user.id;
 
     // Check if post exists
     const { data: post } = await supabase
@@ -527,7 +524,7 @@ export async function votePost(
       .from('forum_votes')
       .select('vote_type')
       .eq('post_id', postId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (existingVote) {
@@ -537,20 +534,20 @@ export async function votePost(
           .from('forum_votes')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', user.id);
+          .eq('user_id', userId);
       } else {
         // Change vote
         await supabase
           .from('forum_votes')
           .update({ vote_type: voteType })
           .eq('post_id', postId)
-          .eq('user_id', user.id);
+          .eq('user_id', userId);
       }
     } else {
       // Create new vote
       await supabase.from('forum_votes').insert({
         post_id: postId,
-        user_id: user.id,
+        user_id: userId,
         vote_type: voteType,
       });
     }
@@ -609,26 +606,26 @@ export async function getUserProfile(
 export async function ensureUserProfile(): Promise<ApiResponse> {
   try {
     const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await auth();
 
-    if (!user) {
+    if (!session?.user?.id) {
       throw new Error('Not authenticated');
     }
+
+    const userId = session.user.id;
 
     // Check if profile exists
     const { data: existingProfile } = await supabase
       .from('user_profiles')
       .select('id')
-      .eq('id', user.id)
+      .eq('id', userId)
       .maybeSingle();
 
     if (!existingProfile) {
       // Create profile
       const { error } = await supabase.from('user_profiles').insert({
-        id: user.id,
-        display_name: user.email?.split('@')[0] || 'User',
+        id: userId,
+        display_name: session.user.email?.split('@')[0] || 'User',
       });
 
       if (error) throw error;
