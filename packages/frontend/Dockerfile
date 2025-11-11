@@ -21,7 +21,8 @@ COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/design-system/package.json ./packages/design-system/
 
 # Install dependencies for entire workspace
-RUN pnpm install --frozen-lockfile
+# Enable scripts for esbuild, sharp, etc. which are required for builds
+RUN pnpm install --frozen-lockfile --ignore-scripts=false
 
 # ============================================
 # Stage 2: Builder
@@ -47,6 +48,8 @@ COPY packages/design-system ./packages/design-system
 
 # Build design-system first (required dependency for frontend)
 WORKDIR /app/packages/design-system
+# Rebuild to ensure native dependencies and build scripts run
+RUN pnpm rebuild
 RUN pnpm build
 
 # Copy frontend package

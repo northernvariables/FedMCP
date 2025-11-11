@@ -29,6 +29,11 @@ RUN pnpm build
 # ============================================
 FROM builder AS test
 
+# Set test environment variables for config validation
+ENV NEO4J_URI=bolt://localhost:7687 \
+    NEO4J_PASSWORD=test \
+    CORS_ORIGINS=https://canadagpt.ca;http://localhost:3000
+
 # Test that config loads without errors
 # This catches delimiter parsing issues before push
 RUN echo "🧪 Testing configuration..." && \
