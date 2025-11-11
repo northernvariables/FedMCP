@@ -64,7 +64,7 @@ export function PartyFilterButtons({
               isActive ? 'ring-2 ring-offset-2' : 'opacity-60 hover:opacity-100'
             }`}
             style={{
-              ...(isActive && { ringColor: party.color }),
+              ...(isActive && { '--tw-ring-color': party.color } as React.CSSProperties),
             }}
             title={party.fullName}
           >
@@ -117,7 +117,7 @@ export function CompactPartyFilterButtons({
               isActive ? 'ring-2 ring-offset-2' : 'opacity-60 hover:opacity-100'
             }`}
             style={{
-              ...(isActive && { ringColor: party.color }),
+              ...(isActive && { '--tw-ring-color': party.color } as React.CSSProperties),
             }}
             title={party.fullName}
           >
