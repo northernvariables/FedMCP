@@ -304,6 +304,64 @@ export const typeDefs = `#graphql
     debate_stage: String  # Which reading stage: "1", "2", or "3"
   }
 
+  # ============================================
+  # Debate Browse/Detail Types
+  # ============================================
+
+  type DebateSummary {
+    document: DocumentSummary!
+    statement_count: Int!
+    speaker_count: Int!
+    top_topics: [String!]!
+    is_question_period: Boolean
+  }
+
+  type DocumentSummary {
+    id: ID!
+    date: Date
+    session_id: String
+    document_type: String
+    number: Int
+  }
+
+  type DebateDetail {
+    document: DocumentInfo!
+    statements: [StatementInfo!]!
+    sections: [String!]!
+    statement_count: Int!
+  }
+
+  type DocumentInfo {
+    id: ID!
+    date: Date
+    session_id: String
+    document_type: String
+    number: Int
+    xml_source_url: String
+  }
+
+  type StatementInfo {
+    id: ID!
+    time: DateTime
+    who_en: String
+    who_fr: String
+    content_en: String
+    content_fr: String
+    h1_en: String
+    h1_fr: String
+    h2_en: String
+    h2_fr: String
+    h3_en: String
+    h3_fr: String
+    statement_type: String
+    politician_id: Int
+    thread_id: String
+    parent_statement_id: String
+    sequence_in_thread: Int
+    wordcount: Int
+    procedural: Boolean
+  }
+
   type Committee @node {
     code: ID! @unique
     name: String!
@@ -442,6 +500,11 @@ export const typeDefs = `#graphql
     dpoh_titles: [String!]
     institutions: [String!]
     subject_matters: [String!]
+
+    # Relationships
+    organization: Organization @relationship(type: "COMMUNICATION_BY", direction: OUT)
+    lobbyist: Lobbyist @relationship(type: "CONDUCTED_BY", direction: OUT)
+    contacted: [MP!]! @relationship(type: "CONTACTED", direction: OUT)
   }
 
   # ============================================
@@ -482,9 +545,8 @@ export const typeDefs = `#graphql
   }
 
   type MetWithProperties @relationshipProperties {
-    date: Date!
-    topic: String
-    dpoh_title: String
+    first_contact: Date!
+    last_contact: Date
   }
 
   type ServedOnProperties @relationshipProperties {
@@ -913,6 +975,68 @@ export const typeDefs = `#graphql
     mpNews(mpName: String!, limit: Int = 10): [NewsArticle!]!
 
     # ============================================
+    # Optimized Lobbying Search Queries
+    # ============================================
+
+    # Full-text search for lobbyists (optimized)
+    searchLobbyists(
+      searchTerm: String!
+      limit: Int = 20
+    ): [Lobbyist!]!
+      @cypher(
+        statement: """
+        CALL db.index.fulltext.queryNodes('lobbyist_search', $searchTerm)
+        YIELD node, score
+        WITH node AS lobbyist, score
+        WHERE score > 0.5
+        RETURN lobbyist
+        ORDER BY score DESC
+        LIMIT $limit
+        """
+        columnName: "lobbyist"
+      )
+
+    # Full-text search for organizations (optimized)
+    searchOrganizations(
+      searchTerm: String!
+      limit: Int = 20
+    ): [Organization!]!
+      @cypher(
+        statement: """
+        CALL db.index.fulltext.queryNodes('organization_search', $searchTerm)
+        YIELD node, score
+        WITH node AS org, score
+        WHERE score > 0.5
+        RETURN org
+        ORDER BY score DESC
+        LIMIT $limit
+        """
+        columnName: "org"
+      )
+
+    # Full-text search for bills (optimized)
+    searchBillsFullText(
+      searchTerm: String!
+      status: String
+      session: String
+      limit: Int = 50
+    ): [Bill!]!
+      @cypher(
+        statement: """
+        CALL db.index.fulltext.queryNodes('bill_search', $searchTerm)
+        YIELD node, score
+        WITH node AS bill, score
+        WHERE score > 0.5
+          AND ($status IS NULL OR bill.status = $status)
+          AND ($session IS NULL OR bill.session = $session)
+        RETURN bill
+        ORDER BY score DESC, bill.introduced_date DESC
+        LIMIT $limit
+        """
+        columnName: "bill"
+      )
+
+    # ============================================
     # Hansard Queries
     # ============================================
 
@@ -986,6 +1110,127 @@ export const typeDefs = `#graphql
         RETURN d
         """
         columnName: "d"
+      )
+
+    # List recent debates (browse view)
+    recentDebates(
+      limit: Int = 20
+      documentType: String  # "D" (Debates) or "E" (Evidence)
+      questionPeriodOnly: Boolean = false
+    ): [DebateSummary!]!
+      @cypher(
+        statement: """
+        MATCH (d:Document)
+        WHERE d.public = true
+          AND ($documentType IS NULL OR d.document_type = $documentType)
+        OPTIONAL MATCH (d)<-[:PART_OF]-(s:Statement)
+        WITH d, s
+        WHERE NOT $questionPeriodOnly OR s.h1_en CONTAINS 'Oral Question' OR s.h1_en CONTAINS 'Question Period'
+        WITH d,
+             count(DISTINCT s) AS statement_count,
+             count(DISTINCT s.politician_id) AS speaker_count,
+             collect(DISTINCT s.h2_en)[0..3] AS top_topics
+        WHERE statement_count > 0
+        RETURN {
+          document: {
+            id: d.id,
+            date: d.date,
+            session_id: d.session_id,
+            document_type: d.document_type,
+            number: d.number
+          },
+          statement_count: statement_count,
+          speaker_count: speaker_count,
+          top_topics: [topic IN top_topics WHERE topic IS NOT NULL]
+        } AS summary
+        ORDER BY d.date DESC
+        LIMIT $limit
+        """
+        columnName: "summary"
+      )
+
+    # Get full debate with all statements (for debate detail page)
+    debateWithStatements(
+      documentId: ID!
+      includeThreading: Boolean = true
+    ): DebateDetail
+      @cypher(
+        statement: """
+        MATCH (d:Document {id: toInteger($documentId)})
+        MATCH (d)<-[:PART_OF]-(s:Statement)
+        WITH d, s
+        ORDER BY s.time ASC
+        WITH d,
+             collect({
+               id: s.id,
+               time: s.time,
+               who_en: s.who_en,
+               who_fr: s.who_fr,
+               content_en: s.content_en,
+               content_fr: s.content_fr,
+               h1_en: s.h1_en,
+               h2_en: s.h2_en,
+               h3_en: s.h3_en,
+               statement_type: s.statement_type,
+               politician_id: s.politician_id,
+               thread_id: s.thread_id,
+               parent_statement_id: s.parent_statement_id,
+               sequence_in_thread: s.sequence_in_thread,
+               wordcount: s.wordcount,
+               procedural: s.procedural
+             }) AS statements,
+             count(DISTINCT s.h1_en) AS section_count,
+             collect(DISTINCT s.h1_en) AS sections
+        RETURN {
+          document: {
+            id: d.id,
+            date: d.date,
+            session_id: d.session_id,
+            document_type: d.document_type,
+            number: d.number,
+            xml_source_url: d.xml_source_url
+          },
+          statements: statements,
+          sections: [section IN sections WHERE section IS NOT NULL],
+          statement_count: size(statements)
+        } AS detail
+        """
+        columnName: "detail"
+      )
+
+    # Question Period debates only
+    questionPeriodDebates(
+      limit: Int = 10
+      sinceDate: Date
+    ): [DebateSummary!]!
+      @cypher(
+        statement: """
+        MATCH (d:Document)<-[:PART_OF]-(s:Statement)
+        WHERE d.public = true
+          AND d.document_type = 'D'
+          AND (s.h1_en CONTAINS 'Oral Question' OR s.h1_en CONTAINS 'Question Period')
+          AND ($sinceDate IS NULL OR d.date >= date($sinceDate))
+        WITH d,
+             count(DISTINCT s) AS statement_count,
+             count(DISTINCT s.politician_id) AS speaker_count,
+             collect(DISTINCT s.h2_en)[0..5] AS top_topics
+        RETURN {
+          document: {
+            id: d.id,
+            date: d.date,
+            session_id: d.session_id,
+            document_type: d.document_type,
+            number: d.number
+          },
+          statement_count: statement_count,
+          speaker_count: speaker_count,
+          top_topics: [topic IN top_topics WHERE topic IS NOT NULL],
+          is_question_period: true
+        } AS summary
+        ORDER BY d.date DESC
+        LIMIT $limit
+        """
+        columnName: "summary"
       )
 
     # ============================================

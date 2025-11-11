@@ -339,8 +339,8 @@ export function ShareButton({
         onClick={handleShareClick}
         className={cn(
           'rounded-lg border-2 border-border shadow-md transition-colors',
-          'bg-transparent',
-          'text-text-secondary hover:text-accent-red hover:border-accent-red hover:shadow-lg',
+          'bg-bg-secondary/80 backdrop-blur-sm',
+          'text-text-primary hover:text-accent-red hover:border-accent-red hover:shadow-lg',
           sizeClasses[size],
           className
         )}

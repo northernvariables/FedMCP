@@ -4,7 +4,7 @@
  * Reusable bookmark button for all card types
  * Features:
  * - Toggle bookmark with optimistic updates
- * - Visual feedback (filled/unfilled star)
+ * - Visual feedback (filled/unfilled bookmark)
  * - Tier limit awareness
  * - Upgrade prompts
  * - Tooltip with state
@@ -13,7 +13,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Star } from 'lucide-react';
+import { Bookmark } from 'lucide-react';
 import { useBookmarksContext } from '@/contexts/BookmarksContext';
 import type { CreateBookmarkData } from '@/hooks/useBookmarks';
 import { useAuth } from '@/contexts/AuthContext';
@@ -110,12 +110,12 @@ export function BookmarkButton({
       onClick={handleClick}
       className={cn(
         'rounded-lg border-2 shadow-md transition-all',
-        'bg-transparent',
+        'bg-bg-secondary/80 backdrop-blur-sm',
         bookmarked
           ? isFavorite
             ? 'border-amber-500 text-amber-500 hover:border-amber-600 hover:text-amber-600 hover:shadow-lg'
             : 'border-accent-red text-accent-red hover:border-accent-red-hover hover:text-accent-red-hover hover:shadow-lg'
-          : 'border-border text-text-secondary hover:text-accent-red hover:border-accent-red hover:shadow-lg',
+          : 'border-border text-text-primary hover:text-accent-red hover:border-accent-red hover:shadow-lg',
         isAnimating && 'scale-110',
         paddingSizes[size],
         className
@@ -124,7 +124,7 @@ export function BookmarkButton({
       aria-label={getTooltip()}
     >
       <div className="flex items-center gap-2">
-        <Star
+        <Bookmark
           size={iconSizes[size]}
           className={cn(
             'transition-all',
@@ -166,7 +166,7 @@ export function BookmarkLimitPrompt({
   return (
     <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
       <div className="flex items-start gap-3">
-        <Star className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <Bookmark className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
         <div className="flex-1">
           <h4 className="font-semibold text-text-primary mb-1">
             Bookmark Limit Reached

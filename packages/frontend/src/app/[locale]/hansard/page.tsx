@@ -6,14 +6,14 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery } from '@apollo/client';
+import { useQuery, NetworkStatus } from '@apollo/client';
 import { useTranslations, useLocale } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Loading } from '@/components/Loading';
 import { Card, Button } from '@canadagpt/design-system';
-import { SEARCH_HANSARD, SEARCH_MPS } from '@/lib/queries';
+import { SEARCH_HANSARD, SEARCH_MPS, GET_RECENT_STATEMENTS } from '@/lib/queries';
 import { Link } from '@/i18n/navigation';
 import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 import {
@@ -45,9 +45,13 @@ export default function HansardPage() {
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeQuery, setActiveQuery] = useState('government'); // Default search
+  const [activeQuery, setActiveQuery] = useState(''); // Empty = default view
   const [showFilters, setShowFilters] = useState(false);
   const [expandedSpeech, setExpandedSpeech] = useState<string | null>(null);
+
+  // Pagination state
+  const [hasMore, setHasMore] = useState(true);
+  const STATEMENTS_PER_PAGE = 10;
 
   // Filter state
   const [selectedParty, setSelectedParty] = useState<string>('');
@@ -84,6 +88,21 @@ export default function HansardPage() {
     }
   }, [searchParams]);
 
+  // Fetch recent statements (default view)
+  const { data: defaultStatementsData, loading: defaultLoading, fetchMore, networkStatus } = useQuery(GET_RECENT_STATEMENTS, {
+    variables: {
+      limit: STATEMENTS_PER_PAGE,
+      offset: 0,
+    },
+    skip: activeQuery !== '', // Only fetch when not searching
+    notifyOnNetworkStatusChange: true, // Required for fetchMore to trigger re-renders
+  });
+
+  // Distinguish between initial loading and "load more" loading
+  // NetworkStatus.loading = initial load, NetworkStatus.fetchMore = pagination
+  const isInitialLoading = networkStatus === NetworkStatus.loading;
+  const isFetchingMore = networkStatus === NetworkStatus.fetchMore;
+
   // Fetch search results
   // TODO: Add language parameter once backend supports it: language: locale
   const { data: hansardData, loading: hansardLoading, refetch } = useQuery(SEARCH_HANSARD, {
@@ -91,6 +110,7 @@ export default function HansardPage() {
       query: activeQuery,
       limit: 100,
     },
+    skip: activeQuery === '', // Only fetch when actively searching
   });
 
   // Fetch MPs for autocomplete
@@ -98,11 +118,31 @@ export default function HansardPage() {
     variables: { current: true, limit: 500 },
   });
 
+  // Track if we have more statements to load
+  // Initial load - assume we have more if we got a full page
+  useEffect(() => {
+    if (defaultStatementsData?.statements && activeQuery === '') {
+      const currentLength = defaultStatementsData.statements.length;
+      console.log('[useEffect] defaultStatementsData updated, length:', currentLength);
+      // If we have at least one full page, assume there might be more
+      setHasMore(currentLength >= STATEMENTS_PER_PAGE);
+    }
+  }, [defaultStatementsData, activeQuery]);
+
   // Filter results based on advanced filters
   const filteredResults = useMemo(() => {
-    if (!hansardData?.searchHansard) return [];
+    // Use default statements if not searching, otherwise use search results
+    const sourceData = activeQuery === ''
+      ? (defaultStatementsData?.statements || [])
+      : (hansardData?.searchHansard || []);
 
-    let results = [...hansardData.searchHansard];
+    console.log('[filteredResults] Source data length:', sourceData.length);
+    console.log('[filteredResults] First 3 items:', sourceData.slice(0, 3).map((s: any) => ({ id: s.id, time: s.time, date: s.partOf?.date })));
+    console.log('[filteredResults] Last 3 items:', sourceData.slice(-3).map((s: any) => ({ id: s.id, time: s.time, date: s.partOf?.date })));
+
+    if (!sourceData.length) return [];
+
+    let results = [...sourceData];
 
     // Party filter
     if (selectedParty) {
@@ -150,12 +190,13 @@ export default function HansardPage() {
     }
 
     return results;
-  }, [hansardData, selectedParty, selectedMP, dateRange, minWordCount, documentType, onlySubstantive]);
+  }, [hansardData, defaultStatementsData, activeQuery, selectedParty, selectedMP, dateRange, minWordCount, documentType, onlySubstantive]);
 
   // Handle search
   const handleSearch = () => {
     if (searchQuery.trim()) {
       setActiveQuery(searchQuery);
+      setHasMore(true);
     }
   };
 
@@ -163,6 +204,85 @@ export default function HansardPage() {
   const handleTopicClick = (query: string) => {
     setSearchQuery(query);
     setActiveQuery(query);
+    setHasMore(true);
+  };
+
+  // Handle load more for default view
+  const handleLoadMore = async () => {
+    console.log('=== handleLoadMore clicked ===');
+    console.log('activeQuery:', activeQuery);
+    console.log('hasMore:', hasMore);
+    console.log('defaultStatementsData:', defaultStatementsData);
+
+    if (activeQuery !== '') {
+      console.log('Skipping: activeQuery is set');
+      return;
+    }
+    if (!hasMore) {
+      console.log('Skipping: no more data');
+      return;
+    }
+
+    try {
+      const currentLength = defaultStatementsData?.statements?.length || 0;
+      console.log('Current length:', currentLength);
+      console.log('Fetching with offset:', currentLength);
+
+      // Find the first visible item ID before fetching
+      const firstVisibleElement = document.querySelector('[data-speech-id]');
+      const anchorId = firstVisibleElement?.getAttribute('data-speech-id');
+      const scrollY = window.scrollY;
+      console.log('Anchor ID before fetch:', anchorId);
+      console.log('Scroll position before fetch:', scrollY);
+
+      const result = await fetchMore({
+        variables: {
+          limit: STATEMENTS_PER_PAGE,
+          offset: currentLength,
+        },
+      });
+
+      console.log('fetchMore result:', result);
+      console.log('Result data:', result.data);
+
+      // result.data.statements contains ONLY the new items fetched
+      // The Apollo cache merge happens automatically
+      // If we got fewer results than requested, we've reached the end
+      const itemsFetched = result.data?.statements?.length || 0;
+      console.log('Items fetched from server:', itemsFetched);
+
+      // Check the cache data immediately after fetchMore
+      console.log('defaultStatementsData after fetchMore:', defaultStatementsData?.statements?.length);
+
+      if (itemsFetched < STATEMENTS_PER_PAGE) {
+        console.log('Setting hasMore to false - got fewer items than requested');
+        setHasMore(false);
+      } else {
+        console.log('Fetched full page, might have more data');
+      }
+
+      // Scroll back to the anchor element after React re-renders
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (anchorId) {
+            const anchorElement = document.querySelector(`[data-speech-id="${anchorId}"]`);
+            if (anchorElement) {
+              anchorElement.scrollIntoView({ block: 'start', behavior: 'instant' });
+              console.log('Scrolled back to anchor:', anchorId);
+            } else {
+              // Fallback to scroll position
+              window.scrollTo(0, scrollY);
+              console.log('Anchor not found, restored scroll position to:', scrollY);
+            }
+          } else {
+            window.scrollTo(0, scrollY);
+            console.log('No anchor, restored scroll position to:', scrollY);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('Error loading more statements:', error);
+    }
   };
 
   // Handle copy quote
@@ -429,7 +549,7 @@ export default function HansardPage() {
         <Card>
           <div className="mb-4">
             <h2 className="text-2xl font-bold text-text-primary">
-              {t('results.title')}
+              {activeQuery ? t('results.title') : t('results.recentDebates')}
               {filteredResults.length > 0 && (
                 <span className="text-text-tertiary ml-2">({filteredResults.length})</span>
               )}
@@ -441,7 +561,7 @@ export default function HansardPage() {
             )}
           </div>
 
-          {hansardLoading ? (
+          {(isInitialLoading || hansardLoading) ? (
             <Loading />
           ) : filteredResults.length === 0 ? (
             <div className="text-center py-12">
@@ -464,8 +584,13 @@ export default function HansardPage() {
               {filteredResults.map((speech: any) => {
                 const isExpanded = expandedSpeech === speech.id;
                 const bilingualSpeech = useBilingualContent(speech);
+
+                // Use HTML content directly - it's from official government sources
                 const content = bilingualSpeech.content || '';
-                const preview = content.length > 300 ? content.substring(0, 300) + '...' : content;
+                // For preview, truncate HTML at a reasonable length
+                // Note: This is a simple truncation and may cut in the middle of a tag
+                // but we'll use full content when expanded
+                const preview = content.length > 500 ? content.substring(0, 500) + '...' : content;
 
                 // Get photo URL from GCS or fallback to ID-based construction
                 const photoUrl = speech.madeBy ? getMPPhotoUrl(speech.madeBy) : null;
@@ -473,6 +598,7 @@ export default function HansardPage() {
                 return (
                   <div
                     key={speech.id}
+                    data-speech-id={speech.id}
                     className="p-4 rounded-lg bg-bg-elevated border border-border-subtle hover:border-accent-red/30 transition-colors"
                   >
                     {/* Header */}
@@ -502,19 +628,40 @@ export default function HansardPage() {
                             {speech.madeBy?.party && (
                               <span className="font-medium">{speech.madeBy.party}</span>
                             )}
-                            {speech.partOf?.date && (
-                              <>
-                                <span>•</span>
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {new Date(speech.partOf.date).toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric'
-                                  })}
-                                </span>
-                              </>
-                            )}
+                            {speech.partOf?.date && (() => {
+                              // Parse date properly - handle both string dates and timestamps
+                              const dateValue = speech.partOf.date;
+                              let date: Date;
+
+                              if (typeof dateValue === 'string') {
+                                // If it's a string like "2024-10-15", parse it directly
+                                date = new Date(dateValue);
+                              } else if (typeof dateValue === 'number') {
+                                // If it's a number, it's likely a timestamp
+                                // Check if it's in seconds (Unix timestamp) or milliseconds
+                                date = dateValue > 9999999999 ? new Date(dateValue) : new Date(dateValue * 1000);
+                              } else {
+                                date = new Date(dateValue);
+                              }
+
+                              // Validate the date is reasonable (between 1990 and 2050)
+                              const year = date.getFullYear();
+                              const isValidDate = !isNaN(date.getTime()) && year >= 1990 && year <= 2050;
+
+                              return isValidDate ? (
+                                <>
+                                  <span>•</span>
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {date.toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric'
+                                    })}
+                                  </span>
+                                </>
+                              ) : null;
+                            })()}
                             {speech.wordcount && (
                               <>
                                 <span>•</span>
@@ -563,10 +710,16 @@ export default function HansardPage() {
 
                     {/* Content */}
                     <div className="mb-3">
-                      <p className="text-text-primary whitespace-pre-line">
-                        {isExpanded ? content : preview}
-                      </p>
-                      {content.length > 300 && (
+                      <div className="text-text-primary prose prose-sm max-w-none">
+                        {(isExpanded ? content : preview).split('\n\n').map((paragraph: string, idx: number) => (
+                          paragraph.trim() && (
+                            <p key={idx} className="mb-2 last:mb-0">
+                              {paragraph}
+                            </p>
+                          )
+                        ))}
+                      </div>
+                      {content.length > 500 && (
                         <button
                           onClick={() => setExpandedSpeech(isExpanded ? null : speech.id)}
                           className="text-sm text-accent-red hover:text-accent-red-hover font-medium mt-2"
@@ -611,6 +764,29 @@ export default function HansardPage() {
               })}
             </div>
           )}
+
+          {/* Load More Button - only shown in default view */}
+          {(() => {
+            const shouldShow = !activeQuery && filteredResults.length > 0 && hasMore;
+            console.log('Load More button visibility:', {
+              activeQuery,
+              resultsLength: filteredResults.length,
+              hasMore,
+              isFetchingMore,
+              shouldShow
+            });
+            return shouldShow && (
+              <div className="mt-6 text-center">
+                <Button
+                  onClick={handleLoadMore}
+                  variant="secondary"
+                  disabled={isFetchingMore}
+                >
+                  {isFetchingMore ? t('results.loading') : t('results.loadMore')}
+                </Button>
+              </div>
+            );
+          })()}
         </Card>
 
         {/* Search Tips */}

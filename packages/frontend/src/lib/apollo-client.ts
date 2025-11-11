@@ -46,6 +46,32 @@ export const apolloClient = new ApolloClient({
               return [...existing, ...incoming];
             },
           },
+          // Pagination policy for Statements (Hansard)
+          statements: {
+            keyArgs: false, // All queries share the same cache entry for offset-based pagination
+            merge(existing = [], incoming, { args }) {
+              // For offset-based pagination, replace or append based on offset
+              const offset = args?.options?.offset || 0;
+              console.log('[Apollo Cache Merge] offset:', offset, 'existing:', existing?.length, 'incoming:', incoming?.length);
+              console.log('[Apollo Cache Merge] Existing IDs:', existing?.slice(0, 3).map((s: any) => s.__ref));
+              console.log('[Apollo Cache Merge] Incoming IDs:', incoming?.slice(0, 3).map((s: any) => s.__ref));
+
+              if (offset === 0) {
+                // New query or reset, replace existing
+                console.log('[Apollo Cache Merge] Replacing cache (offset = 0)');
+                return incoming;
+              }
+              // Paginating, append new items to the END (existing items first, new items after)
+              console.log('[Apollo Cache Merge] Appending to cache');
+              const merged = [...existing, ...incoming];
+              console.log('[Apollo Cache Merge] Merged length:', merged.length);
+              return merged;
+            },
+            read(existing) {
+              // Just return what's in the cache, maintaining order
+              return existing;
+            },
+          },
         },
       },
     },

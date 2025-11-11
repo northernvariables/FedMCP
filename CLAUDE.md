@@ -350,3 +350,4 @@ The client code includes fixes from the original canfedinfo library:
 - production application is located on neo4j VM on google cloud services
 - Ingestion functions are handled on the ingestion VM in Google Cloud Services
 - canadagpt-graph-api is the container in Cloud Run for the production graph api
+- Screenshots are located at ~/Desktop/Screenshot*.png

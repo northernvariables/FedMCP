@@ -19,6 +19,8 @@ import { format } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 import { getBilingualContent } from '@/hooks/useBilingual';
 import { ShareButton } from '@/components/ShareButton';
+import { BookmarkButton } from '@/components/bookmarks/BookmarkButton';
+import { PartyLogo } from '@/components/PartyLogo';
 import { PrintableCard } from '@/components/PrintableCard';
 import { BillGanttWidget } from '@/components/bills/BillGanttWidget';
 
@@ -327,8 +329,26 @@ export default function BillsPage() {
               >
                 <PrintableCard>
                   <Card className="hover:border-accent-red transition-colors cursor-pointer relative">
-                    {/* Share Button - Top Right */}
-                    <div className="absolute top-3 right-3 z-10">
+                    {/* Action Buttons - Top Right */}
+                    <div className="absolute top-3 right-3 z-10 flex gap-2">
+                      <BookmarkButton
+                        bookmarkData={{
+                          itemType: 'bill',
+                          itemId: `${bill.session}-${bill.number}`,
+                          title: `${t('card.billLabel')} ${bill.number}`,
+                          subtitle: bilingualBill.title,
+                          url: `/${locale}/bills/${bill.session}/${bill.number}`,
+                          metadata: {
+                            session: bill.session,
+                            bill_type: bilingualBill.bill_type,
+                            status: bilingualBill.status,
+                            sponsor: bill.sponsor?.name,
+                            party: bill.sponsor?.party,
+                            is_government_bill: bill.is_government_bill,
+                          },
+                        }}
+                        size="sm"
+                      />
                       <ShareButton
                         url={shareUrl}
                         title={shareTitle}
@@ -383,11 +403,20 @@ export default function BillsPage() {
                           }}
                         />
                       )}
-                      <div className="flex items-center gap-4 text-sm text-text-secondary">
+                      <div className="flex items-center gap-4 text-sm text-text-secondary flex-wrap">
                         {bill.sponsor && (
-                          <span>
-                            {t('card.sponsor')}: <span className="text-text-primary">{bill.sponsor.name}</span> ({bill.sponsor.party})
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {bill.sponsor.party && (
+                              <PartyLogo
+                                party={bill.sponsor.party}
+                                size="sm"
+                                linkTo={undefined}
+                              />
+                            )}
+                            <span>
+                              {t('card.sponsor')}: <span className="text-text-primary">{bill.sponsor.name}</span> ({bill.sponsor.party})
+                            </span>
+                          </div>
                         )}
                         {bill.introduced_date && (
                           <span>

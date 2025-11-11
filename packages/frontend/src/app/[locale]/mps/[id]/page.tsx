@@ -15,15 +15,16 @@ import { ExpenseLineChart } from '@/components/ExpenseLineChart';
 import { NewsArticles } from '@/components/NewsArticles';
 import { Tabs } from '@/components/Tabs';
 import { Card } from '@canadagpt/design-system';
-import { GET_MP, GET_MP_SCORECARD, GET_MP_NEWS, GET_MP_SPEECHES } from '@/lib/queries';
+import { GET_MP, GET_MP_SCORECARD, GET_MP_NEWS, GET_MP_SPEECHES, GET_MP_LOBBY_COMMUNICATIONS } from '@/lib/queries';
 import Link from 'next/link';
 import { formatCAD } from '@canadagpt/design-system';
 import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
-import { Mail, Phone, Twitter, MapPin, Award, FileText, TrendingUp, ExternalLink, Building2, Crown, BarChart3, Newspaper, CheckCircle2, XCircle, MinusCircle, Vote, MessageSquare, Calendar, Hash } from 'lucide-react';
+import { Mail, Phone, Twitter, MapPin, Award, FileText, TrendingUp, ExternalLink, Building2, Crown, BarChart3, Newspaper, CheckCircle2, XCircle, MinusCircle, Vote, MessageSquare, Calendar, Hash, Users } from 'lucide-react';
 import { PartyLogo } from '@/components/PartyLogo';
 import { usePageThreading } from '@/contexts/UserPreferencesContext';
 import { ThreadToggle, ConversationThread } from '@/components/hansard';
 import { ShareButton } from '@/components/ShareButton';
+import { BookmarkButton } from '@/components/bookmarks/BookmarkButton';
 
 export default function MPDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -56,6 +57,19 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
   const [expandedSpeeches, setExpandedSpeeches] = useState<Set<string>>(new Set());
   const [imageError, setImageError] = useState(false);
 
+  // Lobbying pagination state
+  const [lobbyingPageSize, setLobbyingPageSize] = useState(10);
+  const [lobbyingOffset, setLobbyingOffset] = useState(0);
+
+  // Lobbying data query
+  const { data: lobbyingData, loading: lobbyingLoading } = useQuery(GET_MP_LOBBY_COMMUNICATIONS, {
+    variables: {
+      mpId: id,
+      limit: lobbyingPageSize,
+      offset: lobbyingOffset
+    },
+  });
+
   // Threading state
   const { enabled: threadedViewEnabled, setEnabled: setThreadedViewEnabled } = usePageThreading();
 
@@ -86,6 +100,34 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
   // Get photo URL from GCS or fallback to ID-based construction
   const photoUrl = getMPPhotoUrl(mp);
 
+  // Extract lobbying data
+  const lobbyCommunications = lobbyingData?.lobbyCommunications || [];
+  const lobbyingTotalCount = lobbyingData?.lobbyCommunicationsAggregate?.count || 0;
+
+  // Calculate pagination info
+  const currentPage = Math.floor(lobbyingOffset / lobbyingPageSize) + 1;
+  const totalPages = Math.ceil(lobbyingTotalCount / lobbyingPageSize);
+  const startItem = lobbyingOffset + 1;
+  const endItem = Math.min(lobbyingOffset + lobbyingPageSize, lobbyingTotalCount);
+
+  // Pagination handlers
+  const handleNextPage = () => {
+    if (lobbyingOffset + lobbyingPageSize < lobbyingTotalCount) {
+      setLobbyingOffset(lobbyingOffset + lobbyingPageSize);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (lobbyingOffset > 0) {
+      setLobbyingOffset(Math.max(0, lobbyingOffset - lobbyingPageSize));
+    }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setLobbyingPageSize(newSize);
+    setLobbyingOffset(0);
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -93,8 +135,25 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
       <main className="flex-1 page-container">
         {/* MP Header */}
         <div className="mb-8 relative">
-          {/* Share Button - Top Right */}
-          <div className="absolute top-0 right-0">
+          {/* Bookmark and Share Buttons - Top Right */}
+          <div className="absolute top-0 right-0 flex gap-2">
+            <BookmarkButton
+              bookmarkData={{
+                itemType: 'mp',
+                itemId: id,
+                title: mp.name,
+                subtitle: `${mp.memberOf?.name || mp.party} - ${mp.represents?.name || mp.riding}`,
+                imageUrl: photoUrl || undefined,
+                url: `/${locale}/mps/${id}`,
+                metadata: {
+                  party: mp.memberOf?.name || mp.party,
+                  riding: mp.represents?.name || mp.riding,
+                  current: mp.current,
+                  cabinet_position: mp.cabinet_position,
+                },
+              }}
+              size="md"
+            />
             <ShareButton
               url={`/${locale}/mps/${id}`}
               title={mp.name}
@@ -103,7 +162,7 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
             />
           </div>
 
-          <div className="flex items-start space-x-6 pr-12">
+          <div className="flex items-start space-x-6 pr-24">
             {photoUrl && !imageError && (
               <img
                 src={photoUrl}
@@ -841,6 +900,213 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                     </div>
                   ) : (
                     <p className="text-text-secondary">No committee memberships found.</p>
+                  )}
+                </Card>
+              ),
+            },
+            {
+              id: 'lobbying',
+              label: 'Lobbying Meetings',
+              content: (
+                <Card>
+                  <h2 className="text-2xl font-bold text-text-primary mb-4 flex items-center">
+                    <Users className="h-6 w-6 mr-2 text-accent-red" />
+                    Lobbying Meetings
+                  </h2>
+
+                  {lobbyingTotalCount > 0 ? (
+                    <>
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-3 gap-4 mb-6 p-4 rounded-lg bg-bg-elevated">
+                        <div>
+                          <div className="text-2xl font-bold text-accent-red">
+                            {lobbyingTotalCount}
+                          </div>
+                          <div className="text-sm text-text-secondary">Total Communications</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-accent-red">
+                            {lobbyCommunications.length > 0 ? new Set(lobbyCommunications.map((c: any) => c.lobbyist?.id).filter(Boolean)).size : 0}
+                          </div>
+                          <div className="text-sm text-text-secondary">Unique Lobbyists (This Page)</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-accent-red">
+                            {lobbyCommunications.length > 0 ? new Set(lobbyCommunications.map((c: any) => c.organization?.id).filter(Boolean)).size : 0}
+                          </div>
+                          <div className="text-sm text-text-secondary">Organizations (This Page)</div>
+                        </div>
+                      </div>
+
+                      {lobbyingLoading ? (
+                        <div className="text-center py-8 text-text-secondary">Loading meetings...</div>
+                      ) : (
+                        <>
+                          {/* Meetings List */}
+                          <div className="space-y-3">
+                            {lobbyCommunications.map((communication: any, index: number) => {
+                          const lobbyist = communication.lobbyist;
+                          const organization = communication.organization;
+
+                          return (
+                            <div
+                              key={`${communication.id}-${index}`}
+                              className="p-4 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors"
+                            >
+                              {/* Date */}
+                              <div className="flex items-center gap-3 mb-3">
+                                <Calendar className="h-4 w-4 text-text-secondary flex-shrink-0" />
+                                <div className="text-sm text-text-primary font-semibold">
+                                  {communication.date ? new Date(communication.date).toLocaleDateString() : 'Date unknown'}
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                {/* Lobbyist */}
+                                {lobbyist && (
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-sm text-text-secondary min-w-[90px] flex-shrink-0">Lobbyist:</span>
+                                    <div className="flex-1">
+                                      <Link
+                                        href={`/${locale}/lobbyists/${lobbyist.id}`}
+                                        className="text-sm font-medium text-accent-red hover:underline"
+                                      >
+                                        {lobbyist.name}
+                                      </Link>
+                                      {lobbyist.firm && (
+                                        <span className="text-sm text-text-tertiary ml-2">({lobbyist.firm})</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Organization */}
+                                {organization && (
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-sm text-text-secondary min-w-[90px] flex-shrink-0">Organization:</span>
+                                    <div className="flex-1">
+                                      <Link
+                                        href={`/${locale}/organizations/${organization.id}`}
+                                        className="text-sm font-medium text-accent-red hover:underline"
+                                      >
+                                        {organization.name}
+                                      </Link>
+                                      {organization.industry && (
+                                        <span className="text-xs px-2 py-0.5 ml-2 rounded bg-gray-500/20 text-gray-400">
+                                          {organization.industry}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Government Officials Contacted */}
+                                {communication.dpoh_names && communication.dpoh_names.length > 0 && (
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-sm text-text-secondary min-w-[90px] flex-shrink-0">Officials:</span>
+                                    <div className="flex-1">
+                                      <div className="text-sm text-text-primary">
+                                        {communication.dpoh_names.slice(0, 3).join(', ')}
+                                        {communication.dpoh_names.length > 3 && (
+                                          <span className="text-text-tertiary"> +{communication.dpoh_names.length - 3} more</span>
+                                        )}
+                                      </div>
+                                      {communication.dpoh_titles && communication.dpoh_titles.length > 0 && (
+                                        <div className="text-xs text-text-tertiary mt-1">
+                                          {communication.dpoh_titles.slice(0, 2).join(', ')}
+                                          {communication.dpoh_titles.length > 2 && ` +${communication.dpoh_titles.length - 2} more`}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Subject Matters */}
+                                {communication.subject_matters && communication.subject_matters.length > 0 && (
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-sm text-text-secondary min-w-[90px] flex-shrink-0">Topics:</span>
+                                    <div className="flex-1 flex flex-wrap gap-1">
+                                      {communication.subject_matters.slice(0, 3).map((subject: string, i: number) => (
+                                        <span key={i} className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400">
+                                          {subject}
+                                        </span>
+                                      ))}
+                                      {communication.subject_matters.length > 3 && (
+                                        <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
+                                          +{communication.subject_matters.length - 3} more
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Institutions */}
+                                {communication.institutions && communication.institutions.length > 0 && (
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-sm text-text-secondary min-w-[90px] flex-shrink-0">Institutions:</span>
+                                    <div className="flex-1">
+                                      <div className="text-sm text-text-tertiary">
+                                        {communication.institutions.slice(0, 2).join(', ')}
+                                        {communication.institutions.length > 2 && ` +${communication.institutions.length - 2} more`}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                            })}
+                          </div>
+
+                          {/* Pagination Controls */}
+                          <div className="mt-6 border-t border-border pt-4">
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                              {/* Showing X of Y */}
+                              <div className="text-sm text-text-secondary">
+                                Showing {startItem} to {endItem} of {lobbyingTotalCount} communications
+                              </div>
+
+                              {/* Page size selector */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-text-secondary">Per page:</span>
+                                <select
+                                  value={lobbyingPageSize}
+                                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                                  className="px-3 py-1 rounded bg-bg-elevated border border-border text-text-primary text-sm"
+                                >
+                                  <option value={10}>10</option>
+                                  <option value={25}>25</option>
+                                  <option value={50}>50</option>
+                                </select>
+                              </div>
+
+                              {/* Navigation buttons */}
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={handlePrevPage}
+                                  disabled={lobbyingOffset === 0}
+                                  className="px-4 py-2 rounded bg-bg-elevated border border-border text-text-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-bg-elevated/80 transition-colors"
+                                >
+                                  Previous
+                                </button>
+                                <span className="text-sm text-text-secondary">
+                                  Page {currentPage} of {totalPages}
+                                </span>
+                                <button
+                                  onClick={handleNextPage}
+                                  disabled={lobbyingOffset + lobbyingPageSize >= lobbyingTotalCount}
+                                  className="px-4 py-2 rounded bg-bg-elevated border border-border text-text-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-bg-elevated/80 transition-colors"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-text-secondary">No lobbying meetings recorded.</p>
                   )}
                 </Card>
               ),

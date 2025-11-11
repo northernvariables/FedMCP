@@ -182,6 +182,28 @@ export const GET_MP = gql`
           }
         }
       }
+      metWithConnection(
+        first: 20
+        sort: [{ edge: { last_contact: DESC } }]
+      ) {
+        totalCount
+        edges {
+          properties {
+            first_contact
+            last_contact
+          }
+          node {
+            id
+            name
+            firm
+            worksFor {
+              id
+              name
+              industry
+            }
+          }
+        }
+      }
     }
   }
   ${MP_FULL_FRAGMENT}
@@ -636,19 +658,430 @@ export const GET_HANSARD_DOCUMENT = gql`
 `;
 
 export const GET_RECENT_DEBATES = gql`
-  query GetRecentDebates($limit: Int = 20) {
-    documents(
-      where: { document_type: "D" }
-      options: { limit: $limit, sort: [{ date: DESC }] }
+  query GetRecentDebates($limit: Int = 20, $documentType: String, $questionPeriodOnly: Boolean = false) {
+    recentDebates(limit: $limit, documentType: $documentType, questionPeriodOnly: $questionPeriodOnly) {
+      document {
+        id
+        date
+        session_id
+        document_type
+        number
+      }
+      statement_count
+      speaker_count
+      top_topics
+    }
+  }
+`;
+
+export const GET_RECENT_STATEMENTS = gql`
+  query GetRecentStatements($limit: Int = 10, $offset: Int = 0) {
+    statements(
+      options: { limit: $limit, offset: $offset, sort: [{ time: DESC }] }
+    ) {
+      ...StatementBasic
+      madeBy {
+        id
+        name
+        party
+      }
+      partOf {
+        id
+        date
+        document_type
+        session_id
+        presentedTo {
+          code
+          name
+          chamber
+        }
+      }
+    }
+  }
+  ${STATEMENT_FRAGMENT}
+`;
+
+// ============================================
+// Lobbying Fragments
+// ============================================
+
+export const ORGANIZATION_BASIC_FRAGMENT = gql`
+  fragment OrganizationBasic on Organization {
+    id
+    name
+    industry
+  }
+`;
+
+export const LOBBYIST_BASIC_FRAGMENT = gql`
+  fragment LobbyistBasic on Lobbyist {
+    id
+    name
+    firm
+  }
+`;
+
+// ============================================
+// Lobbying Queries
+// ============================================
+
+export const GET_MP_LOBBYING = gql`
+  query GetMPLobbying($mpId: ID!, $limit: Int = 10, $after: String) {
+    mps(where: { id: $mpId }) {
+      id
+      name
+      metWithConnection(
+        first: $limit
+        after: $after
+        sort: [{ edge: { last_contact: DESC } }, { edge: { first_contact: DESC } }]
+      ) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          hasPreviousPage
+          startCursor
+          endCursor
+        }
+        edges {
+          cursor
+          properties {
+            first_contact
+            last_contact
+          }
+          node {
+            ...LobbyistBasic
+            worksFor {
+              ...OrganizationBasic
+            }
+          }
+        }
+      }
+    }
+  }
+  ${LOBBYIST_BASIC_FRAGMENT}
+  ${ORGANIZATION_BASIC_FRAGMENT}
+`;
+
+export const GET_LOBBYIST = gql`
+  query GetLobbyist($id: ID!) {
+    lobbyists(where: { id: $id }) {
+      id
+      name
+      firm
+      worksFor {
+        ...OrganizationBasic
+      }
+      metWithConnection(
+        first: 50
+        sort: [{ edge: { last_contact: DESC } }]
+      ) {
+        totalCount
+        edges {
+          properties {
+            first_contact
+            last_contact
+          }
+          node {
+            id
+            name
+            party
+            riding
+          }
+        }
+      }
+      registeredForConnection {
+        totalCount
+        edges {
+          node {
+            id
+            reg_number
+            active
+            effective_date
+            end_date
+          }
+        }
+      }
+    }
+  }
+  ${ORGANIZATION_BASIC_FRAGMENT}
+`;
+
+export const GET_ORGANIZATION = gql`
+  query GetOrganization($id: ID!) {
+    organizations(where: { id: $id }) {
+      id
+      name
+      industry
+      lobbyistsConnection {
+        totalCount
+        edges {
+          node {
+            ...LobbyistBasic
+          }
+        }
+      }
+      lobbiedOnConnection(first: 20) {
+        totalCount
+        edges {
+          properties {
+            date
+            subject
+          }
+          node {
+            number
+            session
+            title
+            title_fr
+            status
+          }
+        }
+      }
+      registrationsConnection(first: 20) {
+        totalCount
+        edges {
+          node {
+            id
+            reg_number
+            registrant_name
+            active
+            effective_date
+          }
+        }
+      }
+    }
+  }
+  ${LOBBYIST_BASIC_FRAGMENT}
+`;
+
+export const GET_DASHBOARD_LOBBYING = gql`
+  query GetDashboardLobbying {
+    lobbyCommunications(
+      options: {
+        limit: 10
+        sort: [{ date: DESC }]
+      }
     ) {
       id
       date
-      number
-      session_id
-      document_type
-      statementsAggregate {
-        count
+      client_org_name
+      registrant_name
+      dpoh_names
+      subject_matters
+      organization {
+        id
+        name
       }
+      lobbyist {
+        id
+        name
+      }
+    }
+  }
+`;
+
+export const SEARCH_ORGANIZATIONS = gql`
+  query SearchOrganizations($searchTerm: String!, $limit: Int = 20) {
+    searchOrganizations(searchTerm: $searchTerm, limit: $limit) {
+      ...OrganizationBasic
+      lobbyistsConnection {
+        totalCount
+      }
+      registrationsConnection(where: { active: true }) {
+        totalCount
+      }
+    }
+  }
+  ${ORGANIZATION_BASIC_FRAGMENT}
+`;
+
+export const SEARCH_LOBBYISTS = gql`
+  query SearchLobbyists($searchTerm: String!, $limit: Int = 20) {
+    searchLobbyists(searchTerm: $searchTerm, limit: $limit) {
+      ...LobbyistBasic
+      worksFor {
+        ...OrganizationBasic
+      }
+      metWithConnection {
+        totalCount
+      }
+    }
+  }
+  ${LOBBYIST_BASIC_FRAGMENT}
+  ${ORGANIZATION_BASIC_FRAGMENT}
+`;
+
+// Detailed Lobby Communication Queries
+export const GET_MP_LOBBY_COMMUNICATIONS = gql`
+  query GetMPLobbyCommunications($mpId: ID!, $limit: Int = 10, $offset: Int = 0) {
+    lobbyCommunications(
+      where: {
+        contacted_SOME: {
+          id: $mpId
+        }
+      }
+      options: {
+        limit: $limit
+        offset: $offset
+        sort: [{ date: DESC }]
+      }
+    ) {
+      id
+      date
+      dpoh_names
+      dpoh_titles
+      subject_matters
+      institutions
+      client_org_name
+      registrant_name
+      organization {
+        id
+        name
+        industry
+      }
+      lobbyist {
+        id
+        name
+        firm
+      }
+    }
+    lobbyCommunicationsAggregate(
+      where: {
+        contacted_SOME: {
+          id: $mpId
+        }
+      }
+    ) {
+      count
+    }
+  }
+`;
+
+export const GET_LOBBYIST_COMMUNICATIONS = gql`
+  query GetLobbyistCommunications($lobbyistId: ID!, $limit: Int = 50) {
+    lobbyCommunications(
+      where: {
+        lobbyist: {
+          id: $lobbyistId
+        }
+      }
+      options: {
+        limit: $limit
+        sort: [{ date: DESC }]
+      }
+    ) {
+      id
+      date
+      dpoh_names
+      dpoh_titles
+      subject_matters
+      institutions
+      client_org_name
+      organization {
+        id
+        name
+        industry
+      }
+      contacted {
+        id
+        name
+        party
+        riding
+      }
+    }
+  }
+`;
+
+export const GET_ORGANIZATION_COMMUNICATIONS = gql`
+  query GetOrganizationCommunications($organizationId: ID!, $limit: Int = 50) {
+    lobbyCommunications(
+      where: {
+        organization: {
+          id: $organizationId
+        }
+      }
+      options: {
+        limit: $limit
+        sort: [{ date: DESC }]
+      }
+    ) {
+      id
+      date
+      dpoh_names
+      dpoh_titles
+      subject_matters
+      institutions
+      registrant_name
+      lobbyist {
+        id
+        name
+        firm
+      }
+      contacted {
+        id
+        name
+        party
+        riding
+      }
+    }
+  }
+`;
+
+// ============================================
+// Debate/Hansard Document Queries
+// ============================================
+
+export const GET_QUESTION_PERIOD_DEBATES = gql`
+  query GetQuestionPeriodDebates($limit: Int = 10, $sinceDate: Date) {
+    questionPeriodDebates(limit: $limit, sinceDate: $sinceDate) {
+      document {
+        id
+        date
+        session_id
+        document_type
+        number
+      }
+      statement_count
+      speaker_count
+      top_topics
+      is_question_period
+    }
+  }
+`;
+
+export const GET_DEBATE_WITH_STATEMENTS = gql`
+  query GetDebateWithStatements($documentId: ID!, $includeThreading: Boolean = true) {
+    debateWithStatements(documentId: $documentId, includeThreading: $includeThreading) {
+      document {
+        id
+        date
+        session_id
+        document_type
+        number
+        xml_source_url
+      }
+      statements {
+        id
+        time
+        who_en
+        who_fr
+        content_en
+        content_fr
+        h1_en
+        h2_en
+        h3_en
+        h1_fr
+        h2_fr
+        h3_fr
+        statement_type
+        politician_id
+        thread_id
+        parent_statement_id
+        sequence_in_thread
+        wordcount
+        procedural
+      }
+      sections
+      statement_count
     }
   }
 `;

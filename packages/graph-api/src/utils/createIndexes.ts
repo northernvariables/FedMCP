@@ -124,6 +124,30 @@ const indexes: IndexDefinition[] = [
     properties: ['thread_id'],
     description: 'Grouping threaded conversations'
   },
+  {
+    name: 'statement_politician_id_idx',
+    label: 'Statement',
+    properties: ['politician_id'],
+    description: 'Join key for MP statements - used in MP detail page queries'
+  },
+  {
+    name: 'statement_member_id_idx',
+    label: 'Statement',
+    properties: ['member_id'],
+    description: 'Alternative join key for MP statements'
+  },
+  {
+    name: 'statement_document_id_idx',
+    label: 'Statement',
+    properties: ['document_id'],
+    description: 'Join key for document-statement relationships'
+  },
+  {
+    name: 'statement_bill_debated_id_idx',
+    label: 'Statement',
+    properties: ['bill_debated_id'],
+    description: 'Filter statements by bill being debated'
+  },
 
   // ============================================
   // Document Indexes
@@ -156,6 +180,174 @@ const indexes: IndexDefinition[] = [
     properties: ['session'],
     description: 'Filtering votes by parliamentary session'
   },
+  {
+    name: 'vote_bill_number_idx',
+    label: 'Vote',
+    properties: ['bill_number'],
+    description: 'Join key for vote-bill relationships without traversing relationships'
+  },
+  {
+    name: 'vote_result_idx',
+    label: 'Vote',
+    properties: ['result'],
+    description: 'Filter votes by result (Passed, Failed, Tied)'
+  },
+
+  // ============================================
+  // Role Indexes (Ministerial Positions)
+  // ============================================
+  {
+    name: 'role_person_id_idx',
+    label: 'Role',
+    properties: ['person_id'],
+    description: 'Join key for MP role relationships'
+  },
+  {
+    name: 'role_is_current_idx',
+    label: 'Role',
+    properties: ['is_current'],
+    description: 'Filter current vs historical roles'
+  },
+  {
+    name: 'role_person_current_idx',
+    label: 'Role',
+    properties: ['person_id', 'is_current'],
+    description: 'Combined filter: current roles by person'
+  },
+
+  // ============================================
+  // Committee Indexes
+  // ============================================
+  {
+    name: 'committee_chamber_idx',
+    label: 'Committee',
+    properties: ['chamber'],
+    description: 'Filter committees by chamber (House, Senate, Joint)'
+  },
+
+  // ============================================
+  // Meeting Indexes
+  // ============================================
+  {
+    name: 'meeting_date_idx',
+    label: 'Meeting',
+    properties: ['date'],
+    description: 'Date sorting and filtering for committee meetings'
+  },
+  {
+    name: 'meeting_committee_code_idx',
+    label: 'Meeting',
+    properties: ['committee_code'],
+    description: 'Filter meetings by committee'
+  },
+
+  // ============================================
+  // Riding Indexes
+  // ============================================
+  {
+    name: 'riding_province_idx',
+    label: 'Riding',
+    properties: ['province'],
+    description: 'Filter ridings by province for geographic queries'
+  },
+
+  // ============================================
+  // Party Indexes
+  // ============================================
+  {
+    name: 'party_code_idx',
+    label: 'Party',
+    properties: ['code'],
+    description: 'Party code lookups (Liberal, Conservative, NDP, etc.)'
+  },
+
+  // ============================================
+  // Organization Indexes (Lobbying)
+  // ============================================
+  {
+    name: 'organization_id_idx',
+    label: 'Organization',
+    properties: ['id'],
+    description: 'Primary key lookups for organization profiles'
+  },
+  {
+    name: 'organization_name_idx',
+    label: 'Organization',
+    properties: ['name'],
+    description: 'Organization name lookups and search'
+  },
+  {
+    name: 'organization_industry_idx',
+    label: 'Organization',
+    properties: ['industry'],
+    description: 'Filter organizations by industry sector'
+  },
+
+  // ============================================
+  // Lobbyist Indexes
+  // ============================================
+  {
+    name: 'lobbyist_id_idx',
+    label: 'Lobbyist',
+    properties: ['id'],
+    description: 'Primary key lookups for lobbyist profiles'
+  },
+  {
+    name: 'lobbyist_name_idx',
+    label: 'Lobbyist',
+    properties: ['name'],
+    description: 'Lobbyist name lookups and search'
+  },
+  {
+    name: 'lobbyist_firm_idx',
+    label: 'Lobbyist',
+    properties: ['firm'],
+    description: 'Filter lobbyists by firm/organization'
+  },
+
+  // ============================================
+  // Lobby Registration Indexes
+  // ============================================
+  {
+    name: 'lobby_registration_active_idx',
+    label: 'LobbyRegistration',
+    properties: ['active'],
+    description: 'Filter active vs inactive lobby registrations'
+  },
+  {
+    name: 'lobby_registration_client_idx',
+    label: 'LobbyRegistration',
+    properties: ['client_org_name'],
+    description: 'Lookups by client organization name'
+  },
+  {
+    name: 'lobby_registration_reg_number_idx',
+    label: 'LobbyRegistration',
+    properties: ['reg_number'],
+    description: 'Unique registration number lookups'
+  },
+  {
+    name: 'lobby_registration_effective_date_idx',
+    label: 'LobbyRegistration',
+    properties: ['effective_date'],
+    description: 'Date sorting and temporal filtering'
+  },
+
+  // ============================================
+  // Lobby Communication Indexes
+  // ============================================
+  {
+    name: 'lobby_communication_date_idx',
+    label: 'LobbyCommunication',
+    properties: ['date'],
+    description: 'Date sorting for recent lobbying activity'
+  },
+  {
+    name: 'lobby_communication_client_idx',
+    label: 'LobbyCommunication',
+    properties: ['client_org_name'],
+    description: 'Filter communications by client organization'
+  },
 ];
 
 /**
@@ -173,6 +365,24 @@ const fulltextIndexes = [
     labels: ['Statement'],
     properties: ['content_fr', 'h1_fr', 'h2_fr', 'h3_fr'],
     description: 'French full-text search across Hansard statements'
+  },
+  {
+    name: 'bill_search',
+    labels: ['Bill'],
+    properties: ['title', 'title_fr', 'summary', 'summary_fr'],
+    description: 'Full-text search for bills by title and summary (both languages)'
+  },
+  {
+    name: 'organization_search',
+    labels: ['Organization'],
+    properties: ['name', 'industry'],
+    description: 'Full-text search for organizations by name and industry'
+  },
+  {
+    name: 'lobbyist_search',
+    labels: ['Lobbyist'],
+    properties: ['name', 'firm'],
+    description: 'Full-text search for lobbyists by name and firm'
   },
 ];
 
@@ -225,7 +435,7 @@ async function createFulltextIndex(session: any, ftIndex: any): Promise<void> {
   }
 
   const labelsStr = ftIndex.labels.map((l: string) => `"${l}"`).join(', ');
-  const propsStr = ftIndex.properties.map((p: string) => `"${p}"`).join(', ');
+  const propsStr = ftIndex.properties.map((p: string) => `n.${p}`).join(', ');
   const cypherQuery = `CREATE FULLTEXT INDEX ${ftIndex.name} IF NOT EXISTS FOR (n:${ftIndex.labels[0]}) ON EACH [${propsStr}]`;
 
   try {

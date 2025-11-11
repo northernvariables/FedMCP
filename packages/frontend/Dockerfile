@@ -44,13 +44,13 @@ COPY pnpm-workspace.yaml ./
 COPY package.json pnpm-lock.yaml ./
 
 # Copy design-system package (workspace dependency)
-COPY packages/design-system ./packages/design-system
+# Note: design-system should be pre-built locally before Docker build
+COPY packages/design-system/package.json ./packages/design-system/
+COPY packages/design-system/dist ./packages/design-system/dist
+COPY packages/design-system/tailwind.config.js ./packages/design-system/tailwind.config.js
 
-# Build design-system first (required dependency for frontend)
+# design-system is already built, skip build step
 WORKDIR /app/packages/design-system
-# Rebuild to ensure native dependencies and build scripts run
-RUN pnpm rebuild
-RUN pnpm build
 
 # Copy frontend package
 WORKDIR /app

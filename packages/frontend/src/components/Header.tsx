@@ -49,8 +49,8 @@ export function Header() {
             <Link href="/bills" className="text-text-secondary hover:text-text-primary transition-colors whitespace-nowrap text-xs lg:text-sm">
               {t('bills')}
             </Link>
-            <Link href="/hansard" className="text-text-secondary hover:text-text-primary transition-colors whitespace-nowrap text-xs lg:text-sm">
-              {t('speeches')}
+            <Link href="/debates" className="text-text-secondary hover:text-text-primary transition-colors whitespace-nowrap text-xs lg:text-sm">
+              {t('debates')}
             </Link>
             <Link href="/about" className="text-text-secondary hover:text-text-primary transition-colors whitespace-nowrap text-xs lg:text-sm">
               {t('about')}
@@ -124,11 +124,11 @@ export function Header() {
                   {t('bills')}
                 </Link>
                 <Link
-                  href="/hansard"
+                  href="/debates"
                   onClick={() => setMobileMenuOpen(false)}
                   className="block px-4 py-2 text-text-secondary hover:text-text-primary hover:bg-bg-elevated transition-colors"
                 >
-                  {t('speeches')}
+                  {t('debates')}
                 </Link>
                 <Link
                   href="/about"

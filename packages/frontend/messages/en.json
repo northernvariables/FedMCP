@@ -46,7 +46,7 @@
     "chamber": "Chamber",
     "committees": "Committees",
     "bills": "Bills",
-    "speeches": "Speeches",
+    "debates": "Debates",
     "lobbying": "Lobbying",
     "spending": "Spending",
     "about": "About",
@@ -350,7 +350,9 @@
     },
     "results": {
       "title": "Search Results",
+      "recentDebates": "Recent Debates",
       "showingFor": "Showing results for:",
+      "showingDate": "Showing debates from:",
       "stats": {
         "speeches": "Speeches Found",
         "speakers": "Unique Speakers",
@@ -364,7 +366,9 @@
       "showLess": "Show less",
       "readMore": "Read more",
       "procedural": "Procedural",
-      "viewFullDebate": "View Full Debate"
+      "viewFullDebate": "View Full Debate",
+      "loading": "Loading...",
+      "loadMore": "Load More"
     },
     "tips": {
       "title": "Search Tips",
@@ -377,6 +381,51 @@
         "Click on speaker names to see their full parliamentary profile"
       ]
     }
+  },
+  "debates": {
+    "title": "Parliamentary Debates",
+    "subtitle": "Explore recent House of Commons debates and committee testimony",
+    "filters": {
+      "all": "All",
+      "houseDebates": "House Debates",
+      "committee": "Committee",
+      "questionPeriod": "Question Period"
+    },
+    "card": {
+      "topTopics": "Top Topics:",
+      "speeches": "speeches",
+      "speech": "speech",
+      "mps": "MPs",
+      "mp": "MP",
+      "viewDebate": "View Debate"
+    },
+    "detail": {
+      "downloadXml": "Download XML",
+      "share": "Share",
+      "bookmark": "Bookmark",
+      "jumpTo": "Jump to:",
+      "jumpToSection": "Jump to Section",
+      "speeches": "speeches",
+      "speech": "speech",
+      "mps": "MPs",
+      "mp": "MP",
+      "procedural": "Procedural",
+      "copyQuote": "Copy quote",
+      "showLess": "Show less",
+      "readMore": "Read more",
+      "words": "words",
+      "session": "Session"
+    },
+    "types": {
+      "houseDebates": "House of Commons Debates",
+      "committeeEvidence": "Committee Evidence"
+    },
+    "loading": "Loading debates...",
+    "loadingDebate": "Loading debate...",
+    "error": "Error loading debates. Please try again.",
+    "notFound": "Debate not found",
+    "notFoundMessage": "The requested debate does not exist.",
+    "noDebates": "No debates found for this filter."
   },
   "chamber": {
     "title": "Chamber Seating",
@@ -474,6 +523,10 @@
     "recentDebates": {
       "title": "Recent Debates",
       "searchHansard": "Search Hansard Records →"
+    },
+    "recentLobbying": {
+      "title": "Recent Lobbying Activity",
+      "viewAll": "View All Lobbying Data →"
     },
     "about": {
       "title": "About This Dashboard",

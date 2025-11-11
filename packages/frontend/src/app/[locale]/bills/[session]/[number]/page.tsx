@@ -14,6 +14,7 @@ import { Loading } from '@/components/Loading';
 import { Card } from '@canadagpt/design-system';
 import { GET_BILL, GET_BILL_LOBBYING, GET_BILL_DEBATES } from '@/lib/queries';
 import { Link } from '@/i18n/navigation';
+import NextLink from 'next/link';
 import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 import { format } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
@@ -23,6 +24,7 @@ import { useBilingualContent } from '@/hooks/useBilingual';
 import { usePageThreading } from '@/contexts/UserPreferencesContext';
 import { ThreadToggle, ConversationThread } from '@/components/hansard';
 import { ShareButton } from '@/components/ShareButton';
+import { BookmarkButton } from '@/components/bookmarks/BookmarkButton';
 
 export default function BillDetailPage({
   params,
@@ -58,6 +60,9 @@ export default function BillDetailPage({
 
   // Threading state
   const { enabled: threadedViewEnabled, setEnabled: setThreadedViewEnabled } = usePageThreading();
+
+  // Lobbying display state
+  const [showAllLobbying, setShowAllLobbying] = useState(false);
 
   const bill = data?.bills?.[0];
   const bilingualBill = useBilingualContent(bill || {});
@@ -95,8 +100,25 @@ export default function BillDetailPage({
       <main className="flex-1 page-container">
         {/* Bill Header */}
         <div className="mb-8 relative">
-          {/* Share Button - Top Right */}
-          <div className="absolute top-0 right-0">
+          {/* Bookmark and Share Buttons - Top Right */}
+          <div className="absolute top-0 right-0 flex gap-2">
+            <BookmarkButton
+              bookmarkData={{
+                itemType: 'bill',
+                itemId: `${bill.session}-${bill.number}`,
+                title: `${t('billNumber')} ${bill.number}`,
+                subtitle: bilingualBill.title,
+                url: `/${locale}/bills/${bill.session}/${bill.number}`,
+                metadata: {
+                  session: bill.session,
+                  number: bill.number,
+                  status: bilingualBill.status,
+                  is_government_bill: bill.is_government_bill,
+                  bill_type: bilingualBill.bill_type,
+                },
+              }}
+              size="md"
+            />
             <ShareButton
               url={`/${locale}/bills/${bill.session}/${bill.number}`}
               title={`${t('billNumber')} ${bill.number} - ${bilingualBill.title}`}
@@ -105,7 +127,7 @@ export default function BillDetailPage({
             />
           </div>
 
-          <div className="flex items-center gap-2 mb-3 flex-wrap pr-12">
+          <div className="flex items-center gap-2 mb-3 flex-wrap pr-24">
             <h1 className="text-4xl font-bold text-text-primary">{t('billNumber')} {bill.number}</h1>
             <span className="text-sm text-text-tertiary">{t('session')} {bill.session}</span>
             {bilingualBill.bill_type && (
@@ -281,28 +303,55 @@ export default function BillDetailPage({
                 </div>
 
                 <div className="space-y-2">
-                  {lobbying.organizations.slice(0, 5).map((org: any, index: number) => (
-                    <div
+                  {(showAllLobbying ? lobbying.organizations : lobbying.organizations.slice(0, 5)).map((org: any, index: number) => (
+                    <NextLink
                       key={index}
-                      className="flex items-center justify-between p-2 rounded bg-bg-secondary"
+                      href={`/${locale}/organizations/${org.id || encodeURIComponent(org.name.toLowerCase().replace(/\s+/g, '-'))}`}
+                      className="block p-3 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors"
                     >
-                      <div>
-                        <div className="font-semibold text-text-primary text-sm">{org.name}</div>
-                        {org.industry && (
-                          <div className="text-xs text-text-tertiary">{org.industry}</div>
-                        )}
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="font-semibold text-accent-red hover:underline text-sm mb-1">
+                            {org.name}
+                          </div>
+                          {org.industry && (
+                            <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
+                              {org.industry}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 ml-4">
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-accent-red">
+                              {org.lobbying_count} {org.lobbying_count === 1 ? 'event' : 'events'}
+                            </div>
+                            {org.lobbyist_count && (
+                              <div className="text-xs text-text-tertiary">
+                                {org.lobbyist_count} {org.lobbyist_count === 1 ? 'lobbyist' : 'lobbyists'}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-sm font-semibold text-accent-red">
-                        {org.lobbying_count}x
-                      </div>
-                    </div>
+                    </NextLink>
                   ))}
                 </div>
 
-                {lobbying.organizations.length > 5 && (
-                  <p className="text-xs text-text-tertiary mt-3">
-                    {t('moreOrganizations', { count: lobbying.organizations.length - 5 })}
-                  </p>
+                {lobbying.organizations.length > 5 && !showAllLobbying && (
+                  <button
+                    onClick={() => setShowAllLobbying(true)}
+                    className="mt-3 text-sm text-accent-red hover:underline"
+                  >
+                    {t('viewAll')} ({lobbying.organizations.length} {t('total')})
+                  </button>
+                )}
+                {showAllLobbying && lobbying.organizations.length > 5 && (
+                  <button
+                    onClick={() => setShowAllLobbying(false)}
+                    className="mt-3 text-sm text-accent-red hover:underline"
+                  >
+                    {t('showLess')}
+                  </button>
                 )}
               </div>
             ) : (

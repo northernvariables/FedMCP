@@ -46,7 +46,7 @@
     "chamber": "Chambre",
     "committees": "Comités",
     "bills": "Projets de loi",
-    "speeches": "Discours",
+    "debates": "Débats",
     "lobbying": "Lobbying",
     "spending": "Dépenses",
     "about": "À propos",
@@ -349,7 +349,9 @@
     },
     "results": {
       "title": "Résultats de recherche",
+      "recentDebates": "Débats récents",
       "showingFor": "Affichage des résultats pour :",
+      "showingDate": "Affichage des débats du :",
       "stats": {
         "speeches": "Discours trouvés",
         "speakers": "Intervenants uniques",
@@ -363,7 +365,9 @@
       "showLess": "Afficher moins",
       "readMore": "Lire la suite",
       "procedural": "Procédural",
-      "viewFullDebate": "Voir le débat complet"
+      "viewFullDebate": "Voir le débat complet",
+      "loading": "Chargement...",
+      "loadMore": "Charger plus"
     },
     "tips": {
       "title": "Conseils de recherche",
@@ -376,6 +380,51 @@
         "Cliquez sur les noms des intervenants pour voir leur profil parlementaire complet"
       ]
     }
+  },
+  "debates": {
+    "title": "Débats parlementaires",
+    "subtitle": "Explorez les débats récents de la Chambre des communes et les témoignages des comités",
+    "filters": {
+      "all": "Tous",
+      "houseDebates": "Débats de la Chambre",
+      "committee": "Comités",
+      "questionPeriod": "Période des questions"
+    },
+    "card": {
+      "topTopics": "Principaux sujets :",
+      "speeches": "interventions",
+      "speech": "intervention",
+      "mps": "députés",
+      "mp": "député",
+      "viewDebate": "Voir le débat"
+    },
+    "detail": {
+      "downloadXml": "Télécharger XML",
+      "share": "Partager",
+      "bookmark": "Sauvegarder",
+      "jumpTo": "Aller à :",
+      "jumpToSection": "Aller à la section",
+      "speeches": "interventions",
+      "speech": "intervention",
+      "mps": "députés",
+      "mp": "député",
+      "procedural": "Procédural",
+      "copyQuote": "Copier la citation",
+      "showLess": "Afficher moins",
+      "readMore": "Lire la suite",
+      "words": "mots",
+      "session": "Session"
+    },
+    "types": {
+      "houseDebates": "Débats de la Chambre des communes",
+      "committeeEvidence": "Témoignages de comité"
+    },
+    "loading": "Chargement des débats...",
+    "loadingDebate": "Chargement du débat...",
+    "error": "Erreur lors du chargement des débats. Veuillez réessayer.",
+    "notFound": "Débat introuvable",
+    "notFoundMessage": "Le débat demandé n'existe pas.",
+    "noDebates": "Aucun débat trouvé pour ce filtre."
   },
   "chamber": {
     "title": "Disposition de la Chambre",

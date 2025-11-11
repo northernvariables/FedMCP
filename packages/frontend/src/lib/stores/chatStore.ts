@@ -442,7 +442,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   // UI State
   // ============================================
 
-  toggleOpen: () => set((state) => ({ isOpen: !state.isOpen })),
+  toggleOpen: () => set((state) => ({
+    isOpen: !state.isOpen,
+    // Reset expanded state when closing the chat
+    isExpanded: state.isOpen ? false : state.isExpanded,
+  })),
   toggleMinimize: () => set((state) => ({ isMinimized: !state.isMinimized })),
   toggleExpanded: () => set((state) => ({ isExpanded: !state.isExpanded })),
 

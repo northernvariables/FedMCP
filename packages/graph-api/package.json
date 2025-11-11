@@ -12,7 +12,8 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "test": "vitest",
-    "create-indexes": "tsx src/utils/createIndexes.ts"
+    "create-indexes": "tsx src/utils/createIndexes.ts",
+    "create-constraints": "tsx src/utils/createConstraints.ts"
   },
   "dependencies": {
     "@neo4j/graphql": "^5.5.0",

@@ -165,20 +165,20 @@ export function BillSquare({ bill, gridPosition, swimlane }: BillSquareProps) {
             />
           </div>
 
-          <div className="text-sm font-semibold text-white line-clamp-3 pr-8">
+          <div className="text-sm font-semibold text-white line-clamp-3 pr-20">
             {bill.number}: {String(title)}
           </div>
 
           {bill.sponsor && (
-            <div className="text-xs text-white/90">
+            <div className="text-xs text-white/90 pr-12">
               {String(bill.sponsor.name)} ({String(bill.sponsor.party)})
             </div>
           )}
 
-          <div className="text-xs text-white/80">{String(status)}</div>
+          <div className="text-xs text-white/80 pr-12">{String(status)}</div>
 
           {/* Activity indicators */}
-          <div className="flex gap-2 text-xs text-white/90">
+          <div className="flex gap-2 text-xs text-white/90 pr-12">
             {bill.hansardDebatesAggregate && bill.hansardDebatesAggregate.count > 0 && (
               <span>💬 {bill.hansardDebatesAggregate.count}</span>
             )}
@@ -190,17 +190,9 @@ export function BillSquare({ bill, gridPosition, swimlane }: BillSquareProps) {
             )}
           </div>
 
-          {/* Button to bill page */}
-          <Link
-            href={`/bills/${bill.session}/${bill.number}` as any}
-            className="mt-2 px-3 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-md transition-colors text-center"
-          >
-            View Details →
-          </Link>
-
-          {/* Sponsor Party Logo - Bottom Right */}
+          {/* Sponsor Party Logo - Left aligned */}
           {bill.sponsor?.party && (
-            <div className="absolute bottom-2 right-2">
+            <div className="flex items-center">
               <PartyLogo
                 party={bill.sponsor.party}
                 size="sm"
@@ -208,6 +200,14 @@ export function BillSquare({ bill, gridPosition, swimlane }: BillSquareProps) {
               />
             </div>
           )}
+
+          {/* Button to bill page */}
+          <Link
+            href={`/bills/${bill.session}/${bill.number}` as any}
+            className="mt-2 px-3 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-md transition-colors text-center"
+          >
+            View Details →
+          </Link>
         </div>
       </div>
     </div>

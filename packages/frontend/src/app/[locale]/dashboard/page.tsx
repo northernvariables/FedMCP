@@ -13,10 +13,10 @@ import { Footer } from '@/components/Footer';
 import { Loading } from '@/components/Loading';
 import { Card } from '@canadagpt/design-system';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { GET_TOP_SPENDERS, SEARCH_MPS, SEARCH_BILLS, SEARCH_HANSARD, GET_DASHBOARD_COUNTS, GET_RANDOM_MPS } from '@/lib/queries';
+import { GET_TOP_SPENDERS, SEARCH_MPS, SEARCH_BILLS, SEARCH_HANSARD, GET_DASHBOARD_COUNTS, GET_RANDOM_MPS, GET_DASHBOARD_LOBBYING } from '@/lib/queries';
 import { Link } from '@/i18n/navigation';
 import { formatCAD } from '@canadagpt/design-system';
-import { Users, FileText, Megaphone, DollarSign, TrendingUp, MessageSquare, Info } from 'lucide-react';
+import { Users, FileText, Megaphone, DollarSign, TrendingUp, MessageSquare, Info, Building } from 'lucide-react';
 import { CompactMPCard } from '@/components/MPCard';
 import { CompactPartyFilterButtons } from '@/components/PartyFilterButtons';
 import { getBilingualContent } from '@/hooks/useBilingual';
@@ -41,6 +41,8 @@ export default function DashboardPage() {
   const { data: hansardData, loading: hansardLoading } = useQuery(SEARCH_HANSARD, {
     variables: { query: "government", limit: 10 },
   });
+
+  const { data: lobbyingData, loading: lobbyingLoading } = useQuery(GET_DASHBOARD_LOBBYING);
 
   // Optimized: Get counts with aggregate queries - 98% less data transfer
   const { data: countsData } = useQuery(GET_DASHBOARD_COUNTS);
@@ -302,6 +304,106 @@ export default function DashboardPage() {
             </div>
           </Card>
         </div>
+
+        {/* Recent Lobbying Activity */}
+        <Card className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-text-primary">
+              {t('recentLobbying.title')}
+            </h2>
+            <Building className="h-6 w-6 text-accent-red" />
+          </div>
+
+          {lobbyingLoading ? (
+            <Loading />
+          ) : lobbyingData?.lobbyCommunications && lobbyingData.lobbyCommunications.length > 0 ? (
+            <div className="space-y-3">
+              {lobbyingData.lobbyCommunications.slice(0, 8).map((comm: any) => {
+                const orgName = comm.organization?.name || comm.client_org_name || 'Unknown Organization';
+                const lobbyistName = comm.lobbyist?.name || comm.registrant_name || 'Unknown Lobbyist';
+                const dpohNames = comm.dpoh_names?.slice(0, 2) || [];
+                const subjectMatters = comm.subject_matters?.slice(0, 3) || [];
+
+                return (
+                  <div
+                    key={comm.id}
+                    className="p-3 rounded-lg bg-bg-elevated border border-border-subtle hover:border-accent-red/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        {comm.organization ? (
+                          <Link
+                            href={`/organizations/${comm.organization.id}` as any}
+                            className="font-semibold text-text-primary hover:text-accent-red transition-colors mb-1 inline-block"
+                          >
+                            {orgName}
+                          </Link>
+                        ) : (
+                          <div className="font-semibold text-text-primary mb-1">
+                            {orgName}
+                          </div>
+                        )}
+                        <div className="text-sm text-text-secondary">
+                          Lobbyist: {comm.lobbyist ? (
+                            <Link
+                              href={`/lobbyists/${comm.lobbyist.id}` as any}
+                              className="text-accent-red hover:underline"
+                            >
+                              {lobbyistName}
+                            </Link>
+                          ) : (
+                            lobbyistName
+                          )}
+                        </div>
+                      </div>
+                      {comm.date && (
+                        <span className="text-sm text-text-tertiary whitespace-nowrap ml-4">
+                          {format(new Date(comm.date), 'MMM d, yyyy', { locale: dateLocale })}
+                        </span>
+                      )}
+                    </div>
+
+                    {dpohNames.length > 0 && (
+                      <div className="text-xs text-text-tertiary mb-2">
+                        Met with: {dpohNames.join(', ')}
+                        {comm.dpoh_names && comm.dpoh_names.length > 2 && ` +${comm.dpoh_names.length - 2} more`}
+                      </div>
+                    )}
+
+                    {subjectMatters.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {subjectMatters.map((subject: string, idx: number) => (
+                          <span
+                            key={idx}
+                            className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400"
+                          >
+                            {subject}
+                          </span>
+                        ))}
+                        {comm.subject_matters && comm.subject_matters.length > 3 && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
+                            +{comm.subject_matters.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-text-secondary">No recent lobbying activity found.</p>
+          )}
+
+          <div className="mt-4 pt-4 border-t border-border-subtle">
+            <Link
+              href="/lobbying"
+              className="text-sm text-accent-red hover:text-accent-red-hover font-semibold"
+            >
+              {t('recentLobbying.viewAll')}
+            </Link>
+          </div>
+        </Card>
 
         {/* Information Banner */}
         <Card className="mt-8 bg-bg-overlay border-accent-red/20">
