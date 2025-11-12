@@ -59,6 +59,7 @@ export default function HansardPage() {
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [minWordCount, setMinWordCount] = useState<number>(0);
   const [documentType, setDocumentType] = useState<string>('');
+  const [statementType, setStatementType] = useState<string>('');
   const [onlySubstantive, setOnlySubstantive] = useState(false);
 
   // Initialize from URL parameters
@@ -67,6 +68,7 @@ export default function HansardPage() {
     const mp = searchParams.get('mp');
     const party = searchParams.get('party');
     const docType = searchParams.get('docType');
+    const stmtType = searchParams.get('statementType');
     const excludeProcedural = searchParams.get('excludeProcedural');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
@@ -78,12 +80,13 @@ export default function HansardPage() {
     if (mp) setSelectedMP(mp);
     if (party) setSelectedParty(party);
     if (docType) setDocumentType(docType);
+    if (stmtType) setStatementType(stmtType);
     if (excludeProcedural === 'true') setOnlySubstantive(true);
     if (startDate) setDateRange(prev => ({ ...prev, start: startDate }));
     if (endDate) setDateRange(prev => ({ ...prev, end: endDate }));
 
     // Show filters if any are set
-    if (mp || party || docType || excludeProcedural || startDate || endDate) {
+    if (mp || party || docType || stmtType || excludeProcedural || startDate || endDate) {
       setShowFilters(true);
     }
   }, [searchParams]);
@@ -184,13 +187,20 @@ export default function HansardPage() {
       );
     }
 
+    // Statement type filter
+    if (statementType) {
+      results = results.filter(speech =>
+        speech.statement_type === statementType
+      );
+    }
+
     // Procedural filter
     if (onlySubstantive) {
       results = results.filter(speech => !speech.procedural);
     }
 
     return results;
-  }, [hansardData, defaultStatementsData, activeQuery, selectedParty, selectedMP, dateRange, minWordCount, documentType, onlySubstantive]);
+  }, [hansardData, defaultStatementsData, activeQuery, selectedParty, selectedMP, dateRange, minWordCount, documentType, statementType, onlySubstantive]);
 
   // Handle search
   const handleSearch = () => {
@@ -436,6 +446,24 @@ export default function HansardPage() {
                     </select>
                   </div>
 
+                  {/* Statement Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
+                      Statement Type
+                    </label>
+                    <select
+                      value={statementType}
+                      onChange={(e) => setStatementType(e.target.value)}
+                      className="w-full px-3 py-2 bg-bg-base border border-border-subtle rounded-lg text-text-primary"
+                    >
+                      <option value="">All Types</option>
+                      <option value="interjection">Interjections Only</option>
+                      <option value="question">Questions Only</option>
+                      <option value="answer">Answers Only</option>
+                      <option value="debate">Debates Only</option>
+                    </select>
+                  </div>
+
                   {/* Date Range Start */}
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
@@ -503,6 +531,7 @@ export default function HansardPage() {
                       setDateRange({ start: '', end: '' });
                       setMinWordCount(0);
                       setDocumentType('');
+                      setStatementType('');
                       setOnlySubstantive(false);
                     }}
                   >

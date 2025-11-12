@@ -133,6 +133,38 @@ export const GET_CHAMBER_SEATING = gql`
   ${MP_SEATING_FRAGMENT}
 `;
 
+// Optimized: Minimal query for MP page initial load (header + overview only)
+export const GET_MP_BASIC_INFO = gql`
+  query GetMPBasicInfo($id: ID!) {
+    mps(where: { id: $id }) {
+      ...MPFull
+      votedConnection(first: 5, sort: [{ node: { date: DESC } }]) {
+        edges {
+          properties {
+            position
+          }
+          node {
+            id
+            number
+            date
+            result
+            yeas
+            nays
+            description
+            subjectOf {
+              number
+              title
+              session
+            }
+          }
+        }
+      }
+    }
+  }
+  ${MP_FULL_FRAGMENT}
+`;
+
+// Legacy full query - kept for backward compatibility
 export const GET_MP = gql`
   query GetMP($id: ID!) {
     mps(where: { id: $id }) {
@@ -210,6 +242,85 @@ export const GET_MP = gql`
   ${BILL_BASIC_FRAGMENT}
 `;
 
+// Lazy-loaded tab-specific queries
+export const GET_MP_LEGISLATION = gql`
+  query GetMPLegislation($id: ID!) {
+    mps(where: { id: $id }) {
+      id
+      sponsored(options: { limit: 100, sort: [{ introduced_date: DESC }] }) {
+        ...BillBasic
+      }
+    }
+  }
+  ${BILL_BASIC_FRAGMENT}
+`;
+
+export const GET_MP_EXPENSES = gql`
+  query GetMPExpenses($id: ID!) {
+    mps(where: { id: $id }) {
+      id
+      expenses(options: { limit: 50, sort: [{ fiscal_year: DESC }, { quarter: DESC }] }) {
+        id
+        fiscal_year
+        quarter
+        amount
+        category
+        description
+      }
+    }
+  }
+`;
+
+export const GET_MP_VOTES = gql`
+  query GetMPVotes($id: ID!) {
+    mps(where: { id: $id }) {
+      id
+      votedConnection(first: 100, sort: [{ node: { date: DESC } }]) {
+        edges {
+          properties {
+            position
+          }
+          node {
+            id
+            number
+            date
+            result
+            yeas
+            nays
+            description
+            subjectOf {
+              number
+              title
+              session
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const GET_MP_COMMITTEES = gql`
+  query GetMPCommittees($id: ID!) {
+    mps(where: { id: $id }) {
+      id
+      servedOnConnection {
+        edges {
+          properties {
+            role
+          }
+          node {
+            code
+            name
+            mandate
+            chamber
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const GET_MP_SCORECARD = gql`
   query GetMPScorecard($mpId: ID!) {
     mpScorecard(mpId: $mpId) {
@@ -224,6 +335,7 @@ export const GET_MP_SCORECARD = gql`
       current_year_expenses
       lobbyist_meetings
       legislative_effectiveness
+      question_period_interjections
     }
   }
   ${MP_BASIC_FRAGMENT}
@@ -383,6 +495,18 @@ export const GET_TOP_SPENDERS = gql`
         ...MPBasic
       }
       total_expenses
+    }
+  }
+  ${MP_BASIC_FRAGMENT}
+`;
+
+export const GET_INTERJECTION_LEADERBOARD = gql`
+  query GetInterjectionLeaderboard($party: String, $limit: Int = 100) {
+    mpInterjectionLeaderboard(party: $party, limit: $limit) {
+      mp {
+        ...MPBasic
+      }
+      interjection_count
     }
   }
   ${MP_BASIC_FRAGMENT}

@@ -15,9 +15,10 @@ export interface Tab {
 interface TabsProps {
   tabs: Tab[];
   defaultTab?: string;
+  onTabChange?: (tabId: string) => void;
 }
 
-export function Tabs({ tabs, defaultTab }: TabsProps) {
+export function Tabs({ tabs, defaultTab, onTabChange }: TabsProps) {
   const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.id);
 
   // Handle URL hash on mount and hash changes
@@ -26,6 +27,7 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
       const hash = window.location.hash.slice(1); // Remove the '#'
       if (hash && tabs.some(tab => tab.id === hash)) {
         setActiveTab(hash);
+        onTabChange?.(hash);
       }
     };
 
@@ -35,7 +37,7 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
     // Listen for hash changes
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [tabs]);
+  }, [tabs, onTabChange]);
 
   const activeTabContent = tabs.find((tab) => tab.id === activeTab)?.content;
 
@@ -43,6 +45,8 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
     setActiveTab(tabId);
     // Update URL hash without triggering a page reload
     window.history.pushState(null, '', `#${tabId}`);
+    // Call the onTabChange callback if provided
+    onTabChange?.(tabId);
   };
 
   return (

@@ -582,11 +582,17 @@ export const typeDefs = `#graphql
     current_year_expenses: Float!
     lobbyist_meetings: Int!
     legislative_effectiveness: Float!
+    question_period_interjections: Int!
   }
 
   type MPExpenseSummary {
     mp: MP!
     total_expenses: Float!
+  }
+
+  type MPInterjectionStats {
+    mp: MP!
+    interjection_count: Int!
   }
 
   # TODO: Implement as custom resolver (type currently disabled)
@@ -694,6 +700,12 @@ export const typeDefs = `#graphql
           OPTIONAL MATCH (mp)<-[:MET_WITH]-(lobbyist:Lobbyist)
           RETURN count(DISTINCT lobbyist) AS lobbyist_meetings
         }
+        CALL {
+          WITH mp
+          OPTIONAL MATCH (mp)<-[:MADE_BY]-(statement:Statement {statement_type: 'interjection'})
+          WHERE statement.h1_en CONTAINS 'Oral Question'
+          RETURN count(DISTINCT statement) AS question_period_interjections
+        }
         RETURN {
           mp: {
             id: mp.id,
@@ -714,7 +726,8 @@ export const typeDefs = `#graphql
             WHEN bills_sponsored > 0
             THEN toFloat(bills_passed) / bills_sponsored * 100
             ELSE 0.0
-          END
+          END,
+          question_period_interjections: question_period_interjections
         } AS scorecard
         """
         columnName: "scorecard"
@@ -763,6 +776,29 @@ export const typeDefs = `#graphql
         RETURN mp
         """
         columnName: "mp"
+      )
+
+    # MPs ranked by Question Period interjections
+    mpInterjectionLeaderboard(
+      party: String
+      limit: Int = 100
+    ): [MPInterjectionStats!]!
+      @cypher(
+        statement: """
+        MATCH (mp:MP)
+        WHERE mp.current = true
+          AND ($party IS NULL OR mp.party = $party)
+        OPTIONAL MATCH (mp)<-[:MADE_BY]-(statement:Statement {statement_type: 'interjection'})
+        WHERE statement.h1_en CONTAINS 'Oral Question'
+        WITH mp, count(DISTINCT statement) AS interjection_count
+        RETURN {
+          mp: mp,
+          interjection_count: interjection_count
+        } AS result
+        ORDER BY interjection_count DESC, mp.name ASC
+        LIMIT $limit
+        """
+        columnName: "result"
       )
 
     # Case-insensitive Bill search with filters
