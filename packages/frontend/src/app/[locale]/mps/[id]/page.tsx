@@ -15,7 +15,17 @@ import { ExpenseLineChart } from '@/components/ExpenseLineChart';
 import { NewsArticles } from '@/components/NewsArticles';
 import { Tabs } from '@/components/Tabs';
 import { Card } from '@canadagpt/design-system';
-import { GET_MP, GET_MP_SCORECARD, GET_MP_NEWS, GET_MP_SPEECHES, GET_MP_LOBBY_COMMUNICATIONS } from '@/lib/queries';
+import {
+  GET_MP_BASIC_INFO,
+  GET_MP_LEGISLATION,
+  GET_MP_EXPENSES,
+  GET_MP_VOTES,
+  GET_MP_COMMITTEES,
+  GET_MP_SCORECARD,
+  GET_MP_NEWS,
+  GET_MP_SPEECHES,
+  GET_MP_LOBBY_COMMUNICATIONS
+} from '@/lib/queries';
 import Link from 'next/link';
 import { formatCAD } from '@canadagpt/design-system';
 import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
@@ -30,7 +40,8 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
   const { id } = use(params);
   const locale = useLocale();
 
-  const { data, loading, error } = useQuery(GET_MP, {
+  // Minimal initial query - just header + overview data
+  const { data, loading, error } = useQuery(GET_MP_BASIC_INFO, {
     variables: { id },
   });
 
@@ -38,11 +49,63 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
     variables: { mpId: id },
   });
 
+  // Lazy-loaded tab data - only fetched when tab is clicked
+  const { data: legislationData, loading: legislationLoading, refetch: refetchLegislation } = useQuery(GET_MP_LEGISLATION, {
+    variables: { id },
+    skip: true, // Don't fetch initially
+  });
+
+  const { data: expensesData, loading: expensesLoading, refetch: refetchExpenses } = useQuery(GET_MP_EXPENSES, {
+    variables: { id },
+    skip: true, // Don't fetch initially
+  });
+
+  const { data: votesData, loading: votesLoading, refetch: refetchVotes } = useQuery(GET_MP_VOTES, {
+    variables: { id },
+    skip: true, // Don't fetch initially
+  });
+
+  const { data: committeesData, loading: committeesLoading, refetch: refetchCommittees } = useQuery(GET_MP_COMMITTEES, {
+    variables: { id },
+    skip: true, // Don't fetch initially
+  });
+
   // Hardcoded global average for now (TODO: fix fetch)
   const globalAverage = 124551.79;
 
   const mp = data?.mps?.[0];
   const scorecard = scorecardData?.mpScorecard;
+
+  // Merge lazy-loaded data with initial data
+  const mpLegislation = legislationData?.mps?.[0];
+  const mpExpenses = expensesData?.mps?.[0];
+  const mpVotes = votesData?.mps?.[0];
+  const mpCommittees = committeesData?.mps?.[0];
+
+  // Track which tabs have been loaded
+  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set(['overview']));
+
+  // Handle tab change to lazy-load data
+  const handleTabChange = (tabId: string) => {
+    if (loadedTabs.has(tabId)) return; // Already loaded
+
+    switch (tabId) {
+      case 'legislation':
+        refetchLegislation();
+        break;
+      case 'expenses':
+        refetchExpenses();
+        break;
+      case 'votes':
+        refetchVotes();
+        break;
+      case 'committees':
+        refetchCommittees();
+        break;
+    }
+
+    setLoadedTabs(prev => new Set([...prev, tabId]));
+  };
 
   const { data: newsData, loading: newsLoading } = useQuery(GET_MP_NEWS, {
     variables: { mpName: mp?.name || '', limit: 10 },
@@ -167,7 +230,7 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
               <img
                 src={photoUrl}
                 alt={mp.name}
-                className="w-[120px] h-48 rounded-xl object-contain bg-bg-elevated"
+                className="w-[150px] h-60 rounded-xl object-contain bg-bg-elevated"
                 onError={() => setImageError(true)}
               />
             )}
@@ -191,52 +254,106 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                 {mp.memberOf?.name || mp.party} · {mp.represents?.name || mp.riding}{mp.represents?.province && `, ${mp.represents.province}`}
               </p>
 
-              <div className="flex flex-wrap gap-4 text-sm text-text-secondary">
-                {mp.email && (
-                  <a href={`mailto:${mp.email}`} className="flex items-center hover:text-accent-red transition-colors">
-                    <Mail className="h-4 w-4 mr-2" />
-                    {mp.email}
-                  </a>
-                )}
-                {mp.phone && (
-                  <div className="flex items-center">
-                    <Phone className="h-4 w-4 mr-2" />
-                    {mp.phone}
-                  </div>
-                )}
-                {mp.twitter && (
-                  <a
-                    href={`https://twitter.com/${mp.twitter}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center hover:text-accent-red transition-colors"
-                  >
-                    <Twitter className="h-4 w-4 mr-2" />
-                    @{mp.twitter}
-                  </a>
-                )}
-                {mp.wikipedia_id && (
-                  <a
-                    href={`https://en.wikipedia.org/?curid=${mp.wikipedia_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center hover:text-accent-red transition-colors"
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Wikipedia
-                  </a>
-                )}
-                {mp.ourcommons_url && (
-                  <a
-                    href={mp.ourcommons_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center hover:text-accent-red transition-colors"
-                  >
-                    <Building2 className="h-4 w-4 mr-2" />
-                    OurCommons Profile
-                  </a>
-                )}
+              {/* Contact Information & Office Details */}
+              <div className="space-y-3">
+                {/* Main Contact Row */}
+                <div className="flex flex-wrap gap-4 text-sm text-text-secondary">
+                  {mp.email && (
+                    <a href={`mailto:${mp.email}`} className="flex items-center hover:text-accent-red transition-colors">
+                      <Mail className="h-4 w-4 mr-2" />
+                      {mp.email}
+                    </a>
+                  )}
+                  {mp.phone && (
+                    <a href={`tel:${mp.phone}`} className="flex items-center hover:text-accent-red transition-colors">
+                      <Phone className="h-4 w-4 mr-2" />
+                      {mp.phone}
+                      <span className="ml-1 text-xs text-text-tertiary">(Ottawa)</span>
+                    </a>
+                  )}
+                  {mp.twitter && (
+                    <a
+                      href={`https://twitter.com/${mp.twitter}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center hover:text-accent-red transition-colors"
+                    >
+                      <Twitter className="h-4 w-4 mr-2" />
+                      @{mp.twitter}
+                    </a>
+                  )}
+                  {mp.wikipedia_id && (
+                    <a
+                      href={`https://en.wikipedia.org/?curid=${mp.wikipedia_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center hover:text-accent-red transition-colors"
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Wikipedia
+                    </a>
+                  )}
+                  {mp.ourcommons_url && (
+                    <a
+                      href={mp.ourcommons_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center hover:text-accent-red transition-colors"
+                    >
+                      <Building2 className="h-4 w-4 mr-2" />
+                      OurCommons
+                    </a>
+                  )}
+                </div>
+
+                {/* Constituency Office(s) */}
+                {mp.constituency_office && (() => {
+                  // Split by double line breaks to detect multiple offices
+                  const offices = mp.constituency_office
+                    .split(/\n\n+/)
+                    .map(office => office.trim())
+                    .filter(office => office.length > 0);
+
+                  // Parse office text to extract and format phone numbers
+                  const parseOffice = (officeText: string) => {
+                    const lines = officeText.split('\n');
+                    const elements: React.ReactNode[] = [];
+
+                    lines.forEach((line, idx) => {
+                      // Check if line contains a phone number
+                      const phoneMatch = line.match(/^Phone:\s*(.+)$/i);
+
+                      if (phoneMatch) {
+                        const phoneNumber = phoneMatch[1].trim();
+                        elements.push(
+                          <div key={idx} className="flex items-center gap-2">
+                            <Phone className="h-3 w-3 flex-shrink-0" />
+                            <a href={`tel:${phoneNumber.replace(/[^0-9+]/g, '')}`} className="hover:text-accent-red transition-colors">
+                              {phoneNumber}
+                            </a>
+                          </div>
+                        );
+                      } else if (line.trim()) {
+                        elements.push(<div key={idx}>{line}</div>);
+                      }
+                    });
+
+                    return elements;
+                  };
+
+                  return (
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      {offices.map((office, index) => (
+                        <div key={index} className="flex items-start gap-2 flex-1 min-w-[250px]">
+                          <MapPin className="h-4 w-4 mt-0.5 text-accent-red flex-shrink-0" />
+                          <div className="text-text-secondary leading-relaxed space-y-0.5">
+                            {parseOffice(office)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -245,6 +362,7 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
         {/* Tabs for organized content */}
         <Tabs
           defaultTab="overview"
+          onTabChange={handleTabChange}
           tabs={[
             {
               id: 'overview',
@@ -279,6 +397,10 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                             {formatCAD(scorecard.current_year_expenses, { compact: true })}
                           </div>
                           <div className="text-sm text-text-secondary">Current Year Expenses</div>
+                        </div>
+                        <div>
+                          <div className="text-3xl font-bold text-accent-red">{scorecard.question_period_interjections}</div>
+                          <div className="text-sm text-text-secondary">Question Period Interjections</div>
                         </div>
                       </div>
                     </Card>
@@ -430,19 +552,6 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                       </div>
                     </Card>
                   )}
-
-                  {/* Constituency Office */}
-                  {mp.constituency_office && (
-                    <Card>
-                      <h2 className="text-2xl font-bold text-text-primary mb-4 flex items-center">
-                        <MapPin className="h-6 w-6 mr-2 text-accent-red" />
-                        Constituency Office
-                      </h2>
-                      <div className="text-text-secondary whitespace-pre-line">
-                        {mp.constituency_office}
-                      </div>
-                    </Card>
-                  )}
                 </>
               ),
             },
@@ -456,9 +565,11 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                     Sponsored Bills
                   </h2>
 
-                  {mp.sponsored && mp.sponsored.length > 0 ? (
+                  {legislationLoading ? (
+                    <Loading />
+                  ) : mpLegislation?.sponsored && mpLegislation.sponsored.length > 0 ? (
                     <div className="space-y-3">
-                      {mp.sponsored.map((bill: any) => (
+                      {mpLegislation.sponsored.map((bill: any) => (
                         <Link
                           key={`${bill.number}-${bill.session}`}
                           href={`/bills/${bill.session}/${bill.number}`}
@@ -487,27 +598,29 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
             {
               id: 'expenses',
               label: 'Expenses',
-              content: (
+              content: expensesLoading ? (
+                <Card><Loading /></Card>
+              ) : (
                 <>
                   {/* Expense Trend Line Chart */}
-                  {mp.expenses && mp.expenses.length > 0 && (
+                  {mpExpenses?.expenses && mpExpenses.expenses.length > 0 && (
                     <Card className="mb-6">
                       <h2 className="text-2xl font-bold text-text-primary mb-4 flex items-center">
                         <TrendingUp className="h-6 w-6 mr-2 text-accent-red" />
                         Spending Trend Over Time
                       </h2>
-                      <ExpenseLineChart expenses={mp.expenses} />
+                      <ExpenseLineChart expenses={mpExpenses.expenses} />
                     </Card>
                   )}
 
                   {/* Expense Breakdown by Category */}
-                  {mp.expenses && mp.expenses.length > 0 && (
+                  {mpExpenses?.expenses && mpExpenses.expenses.length > 0 && (
                     <Card className="mb-6">
                       <h2 className="text-2xl font-bold text-text-primary mb-4 flex items-center">
                         <BarChart3 className="h-6 w-6 mr-2 text-accent-red" />
                         Quarterly Breakdown by Category
                       </h2>
-                      <ExpenseChart expenses={mp.expenses} globalAverage={globalAverage} />
+                      <ExpenseChart expenses={mpExpenses.expenses} globalAverage={globalAverage} />
                     </Card>
                   )}
 
@@ -518,9 +631,9 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                       Detailed Expenses
                     </h2>
 
-                    {mp.expenses && mp.expenses.length > 0 ? (
+                    {mpExpenses?.expenses && mpExpenses.expenses.length > 0 ? (
                       <div className="space-y-3">
-                        {mp.expenses.map((expense: any) => (
+                        {mpExpenses.expenses.map((expense: any) => (
                           <div
                             key={expense.id}
                             className="p-3 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors"
@@ -578,9 +691,11 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                     Voting Record
                   </h2>
 
-                  {mp.votedConnection?.edges && mp.votedConnection.edges.length > 0 ? (
+                  {votesLoading ? (
+                    <Loading />
+                  ) : mpVotes?.votedConnection?.edges && mpVotes.votedConnection.edges.length > 0 ? (
                     <div className="space-y-3">
-                      {mp.votedConnection.edges.map((edge: any) => {
+                      {mpVotes.votedConnection.edges.map((edge: any) => {
                         const vote = edge.node;
                         const mpVote = edge.properties?.position; // How the MP voted
 
@@ -855,9 +970,11 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                     Committee Memberships
                   </h2>
 
-                  {mp.servedOnConnection?.edges && mp.servedOnConnection.edges.length > 0 ? (
+                  {committeesLoading ? (
+                    <Loading />
+                  ) : mpCommittees?.servedOnConnection?.edges && mpCommittees.servedOnConnection.edges.length > 0 ? (
                     <div className="space-y-3">
-                      {mp.servedOnConnection.edges.map((edge: any) => {
+                      {mpCommittees.servedOnConnection.edges.map((edge: any) => {
                         const committee = edge.node;
                         const role = edge.properties?.role || 'Member';
 
