@@ -230,7 +230,7 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
               <img
                 src={photoUrl}
                 alt={mp.name}
-                className="w-[150px] h-60 rounded-xl object-contain bg-bg-elevated"
+                className="w-[180px] h-72 rounded-xl object-contain bg-bg-elevated"
                 onError={() => setImageError(true)}
               />
             )}
