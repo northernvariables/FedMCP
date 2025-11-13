@@ -149,3 +149,13 @@ env-vars.yaml
 *.dump.gz
 backups/
 openparliament.public.sql.bz2
+
+# ============================================
+# Working Files & Debugging Scripts
+# ============================================
+BUG_FIX_PLAN.md
+check_rempel_expenses.py
+find_mps_no_expenses.js
+find_mps_without_expenses.py
+run_expense_ingestion.py
+packages/data-pipeline/migrations/
