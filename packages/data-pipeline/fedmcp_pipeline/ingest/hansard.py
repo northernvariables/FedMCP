@@ -8,6 +8,7 @@ import re
 from ..utils.neo4j_client import Neo4jClient
 from ..utils.postgres_client import PostgresClient
 from ..utils.progress import logger, ProgressTracker
+from ..utils.keyword_extraction import extract_document_keywords
 
 
 # Data Quality Utilities
@@ -551,6 +552,138 @@ def create_hansard_indexes(neo4j_client: Neo4jClient) -> None:
         logger.warning(f"Could not create document_date index: {e}")
 
     logger.info("Hansard indexes created successfully")
+
+
+def extract_hansard_keywords(
+    neo4j_client: Neo4jClient,
+    session_id: Optional[str] = None,
+    limit: Optional[int] = None,
+    top_n: int = 20
+) -> int:
+    """
+    Extract and populate keywords for Hansard documents using TF-IDF.
+
+    Processes documents by session to build proper corpus for keyword weighting.
+
+    Args:
+        neo4j_client: Neo4j client instance
+        session_id: Optional specific session to process (e.g., "45-1")
+        limit: Optional limit for number of documents to process
+        top_n: Number of keywords to extract per document
+
+    Returns:
+        Number of documents updated with keywords
+    """
+    logger.info("Extracting keywords for Hansard documents...")
+
+    # Get sessions to process
+    if session_id:
+        sessions_query = """
+            MATCH (d:Document {session_id: $session_id})
+            WHERE d.public = true
+            RETURN DISTINCT d.session_id as session_id
+        """
+        sessions = neo4j_client.run_query(sessions_query, {"session_id": session_id})
+    else:
+        sessions_query = """
+            MATCH (d:Document)
+            WHERE d.public = true AND d.session_id IS NOT NULL
+            RETURN DISTINCT d.session_id as session_id
+            ORDER BY session_id DESC
+        """
+        sessions = neo4j_client.run_query(sessions_query)
+
+    total_updated = 0
+
+    for session_row in sessions:
+        session = session_row['session_id']
+        logger.info(f"Processing session {session}...")
+
+        # Get all documents in session
+        docs_query = """
+            MATCH (d:Document {session_id: $session_id})
+            WHERE d.public = true
+            RETURN d.id as doc_id
+            ORDER BY d.date DESC
+        """
+        if limit and not session_id:
+            docs_query += f" LIMIT {limit}"
+
+        documents = neo4j_client.run_query(docs_query, {"session_id": session})
+
+        if not documents:
+            continue
+
+        doc_ids = [doc['doc_id'] for doc in documents]
+        logger.info(f"  Processing {len(doc_ids)} documents in session {session}")
+
+        # Get all statement text for corpus
+        corpus_query = """
+            MATCH (d:Document)<-[:PART_OF]-(s:Statement)
+            WHERE d.id IN $doc_ids
+              AND s.procedural = false
+            RETURN d.id as doc_id,
+                   collect(COALESCE(s.content_en, '')) as contents_en,
+                   collect(COALESCE(s.content_fr, '')) as contents_fr
+        """
+        result = neo4j_client.run_query(corpus_query, {"doc_ids": doc_ids})
+
+        # Build document texts and corpus
+        doc_texts = {}
+        corpus_en = []
+        corpus_fr = []
+
+        for row in result:
+            text_en = ' '.join([c for c in row['contents_en'] if c])
+            text_fr = ' '.join([c for c in row['contents_fr'] if c])
+
+            doc_texts[row['doc_id']] = {
+                'text_en': text_en,
+                'text_fr': text_fr
+            }
+
+            if text_en:
+                corpus_en.append({'text': text_en})
+            if text_fr:
+                corpus_fr.append({'text': text_fr})
+
+        logger.info(f"  Corpus: {len(corpus_en)} EN docs, {len(corpus_fr)} FR docs")
+
+        # Extract keywords for each document
+        tracker = ProgressTracker(
+            total=len(doc_texts),
+            desc=f"Extracting keywords ({session})"
+        )
+
+        for doc_id, texts in doc_texts.items():
+            # Extract keywords
+            keywords_en, keywords_fr = extract_document_keywords(
+                texts['text_en'],
+                texts['text_fr'],
+                corpus_en,
+                corpus_fr,
+                top_n=top_n
+            )
+
+            # Update document
+            neo4j_client.run_query("""
+                MATCH (d:Document {id: $doc_id})
+                SET d.keywords_en = $keywords_en,
+                    d.keywords_fr = $keywords_fr,
+                    d.updated_at = datetime()
+            """, {
+                "doc_id": doc_id,
+                "keywords_en": keywords_en,
+                "keywords_fr": keywords_fr
+            })
+
+            total_updated += 1
+            tracker.update(1)
+
+        tracker.close()
+
+    logger.success(f"✅ Extracted keywords for {total_updated} documents")
+    return total_updated
 
 
 def ingest_hansard_sample(
