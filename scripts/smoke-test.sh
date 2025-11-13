@@ -6,15 +6,19 @@ set -euo pipefail
 
 SERVICE_URL=$1
 ORIGIN=${2:-https://canadagpt.ca}
+API_KEY=${3:-}
 
 if [ -z "$SERVICE_URL" ]; then
-  echo "Usage: $0 <service-url> [origin]"
-  echo "Example: $0 https://canadagpt-graph-api-xxx.run.app https://canadagpt.ca"
+  echo "Usage: $0 <service-url> [origin] [api-key]"
+  echo "Example: $0 https://canadagpt-graph-api-xxx.run.app https://canadagpt.ca your-api-key"
   exit 1
 fi
 
 echo "🧪 Running smoke tests against $SERVICE_URL..."
 echo "   Using origin: $ORIGIN"
+if [ -n "$API_KEY" ]; then
+  echo "   Using API key: ${API_KEY:0:8}..."
+fi
 echo ""
 
 FAILED=0
@@ -68,11 +72,19 @@ echo ""
 
 # Test 3: Sample GraphQL query
 echo "Test 3: Sample MP query..."
-QUERY='{"query":"{ mPs(options: { limit: 1 }) { name party } }"}'
-RESPONSE=$(curl -s -X POST "${SERVICE_URL}/graphql" \
-  -H "Content-Type: application/json" \
-  -H "Origin: $ORIGIN" \
-  -d "$QUERY")
+QUERY='{"query":"{ mps(options: { limit: 1 }) { name party } }"}'
+if [ -n "$API_KEY" ]; then
+  RESPONSE=$(curl -s -X POST "${SERVICE_URL}/graphql" \
+    -H "Content-Type: application/json" \
+    -H "Origin: $ORIGIN" \
+    -H "X-API-Key: $API_KEY" \
+    -d "$QUERY")
+else
+  RESPONSE=$(curl -s -X POST "${SERVICE_URL}/graphql" \
+    -H "Content-Type: application/json" \
+    -H "Origin: $ORIGIN" \
+    -d "$QUERY")
+fi
 
 if echo "$RESPONSE" | grep -q '"errors"'; then
   echo "❌ GraphQL query returned errors:"

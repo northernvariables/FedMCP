@@ -27,6 +27,7 @@ const GET_STATEMENT = gql`
         name
         party
         photo_url
+        photo_url_source
       }
       partOf {
         id

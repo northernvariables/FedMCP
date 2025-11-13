@@ -4,7 +4,7 @@
 
 'use client';
 
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useRef, useMemo } from 'react';
 
 export interface Tab {
   id: string;
@@ -20,6 +20,15 @@ interface TabsProps {
 
 export function Tabs({ tabs, defaultTab, onTabChange }: TabsProps) {
   const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.id);
+  const onTabChangeRef = useRef(onTabChange);
+
+  // Memoize tab IDs to avoid re-running effect when tabs array is recreated with same IDs
+  const tabIdsKey = useMemo(() => tabs.map(t => t.id).join(','), [tabs]);
+
+  // Keep ref up to date
+  useEffect(() => {
+    onTabChangeRef.current = onTabChange;
+  }, [onTabChange]);
 
   // Handle URL hash on mount and hash changes
   useEffect(() => {
@@ -27,7 +36,7 @@ export function Tabs({ tabs, defaultTab, onTabChange }: TabsProps) {
       const hash = window.location.hash.slice(1); // Remove the '#'
       if (hash && tabs.some(tab => tab.id === hash)) {
         setActiveTab(hash);
-        onTabChange?.(hash);
+        onTabChangeRef.current?.(hash);
       }
     };
 
@@ -37,7 +46,7 @@ export function Tabs({ tabs, defaultTab, onTabChange }: TabsProps) {
     // Listen for hash changes
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [tabs, onTabChange]);
+  }, [tabIdsKey, tabs]); // Only re-run if tab IDs change
 
   const activeTabContent = tabs.find((tab) => tab.id === activeTab)?.content;
 
@@ -46,7 +55,7 @@ export function Tabs({ tabs, defaultTab, onTabChange }: TabsProps) {
     // Update URL hash without triggering a page reload
     window.history.pushState(null, '', `#${tabId}`);
     // Call the onTabChange callback if provided
-    onTabChange?.(tabId);
+    onTabChangeRef.current?.(tabId);
   };
 
   return (

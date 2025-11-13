@@ -811,7 +811,7 @@ export default function SettingsPage() {
                         {tierNames[subscriptionTier]}
                       </h3>
                       <p className="text-gray-600 mt-1">
-                        {subscriptionTier === 'FREE' && '10 queries per day'}
+                        {subscriptionTier === 'FREE' && '10 queries (lifetime)'}
                         {subscriptionTier === 'BASIC' && '200 queries per month - $6.99/month'}
                         {subscriptionTier === 'PRO' && '1000 queries per month + MCP access - $29.99/month'}
                       </p>

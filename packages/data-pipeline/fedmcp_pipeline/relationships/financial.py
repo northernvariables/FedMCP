@@ -34,7 +34,7 @@ def build_financial_flows(neo4j_client: Neo4jClient, batch_size: int = 10000) ->
     result = neo4j_client.run_query(
         """
         MATCH (m:MP), (e:Expense)
-        WHERE e.mp_name = m.name
+        WHERE e.mp_id = m.id
         RETURN m.id AS mp_id, e.id AS expense_id
         LIMIT 10000
         """

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { GET_DEBATE_WITH_STATEMENTS } from '@/lib/queries';
 import { DebateContextCard } from '@/components/debates/DebateContextCard';
+import { StatementCard } from '@/components/debates/StatementCard';
 import { SectionNavigator } from '@/components/debates/SectionNavigator';
 import { ThreadToggle } from '@/components/hansard/ThreadToggle';
 import { ConversationThread } from '@/components/hansard/ConversationThread';
@@ -18,7 +19,6 @@ export default function DebateDetailPage() {
 
   // State
   const [showThreaded, setShowThreaded] = useState(true);
-  const [expandedSpeech, setExpandedSpeech] = useState<string | null>(null);
 
   // Query
   const { data, loading, error } = useQuery(GET_DEBATE_WITH_STATEMENTS, {
@@ -103,166 +103,6 @@ export default function DebateDetailPage() {
     return result;
   }, [debateDetail, showThreaded]);
 
-  // Handle copy quote
-  const handleCopyQuote = (statement: any) => {
-    const content = locale === 'fr' ? statement.content_fr : statement.content_en;
-    const who = locale === 'fr' ? statement.who_fr : statement.who_en;
-    const date = new Date(debateDetail.document.date).toLocaleDateString();
-    const quote = `"${content}"\n\n— ${who}, ${date}`;
-    navigator.clipboard.writeText(quote);
-  };
-
-  // Render statement card
-  const renderStatement = (statement: any, isReply: boolean = false) => {
-    const bilingualStatement = {
-      content: locale === 'fr' ? statement.content_fr : statement.content_en,
-      who: locale === 'fr' ? statement.who_fr : statement.who_en,
-      h1: locale === 'fr' ? statement.h1_fr : statement.h1_en,
-      h2: locale === 'fr' ? statement.h2_fr : statement.h2_en,
-      h3: locale === 'fr' ? statement.h3_fr : statement.h3_en
-    };
-
-    const content = bilingualStatement.content || '';
-    const isExpanded = expandedSpeech === statement.id;
-    const preview = content.length > 500 ? content.substring(0, 500) + '...' : content;
-
-    return (
-      <div
-        key={statement.id}
-        data-section={bilingualStatement.h1}
-        className={`p-4 rounded-lg bg-bg-elevated border border-border-subtle ${
-          isReply ? 'ml-8 border-l-4' : ''
-        }`}
-        style={
-          isReply
-            ? {
-                borderLeftColor: getPartyColor(statement),
-              }
-            : undefined
-        }
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <div className="font-semibold text-text-primary">
-                {bilingualStatement.who}
-              </div>
-              <div className="flex items-center gap-2 text-sm text-text-tertiary flex-wrap">
-                {statement.time && (() => {
-                  const date = new Date(statement.time);
-                  const year = date.getFullYear();
-                  const isValidDate = !isNaN(date.getTime()) && year >= 1990 && year <= 2050;
-
-                  return isValidDate ? (
-                    <>
-                      <Calendar className="h-3 w-3" />
-                      <span>
-                        {date.toLocaleString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        })}
-                      </span>
-                    </>
-                  ) : null;
-                })()}
-                {statement.wordcount && (
-                  <>
-                    <span>•</span>
-                    <Hash className="h-3 w-3" />
-                    <span>
-                      {statement.wordcount} {locale === 'fr' ? 'mots' : 'words'}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Copy button */}
-          <button
-            onClick={() => handleCopyQuote(statement)}
-            className="p-2 hover:bg-bg-overlay rounded-lg transition-colors"
-            title={locale === 'fr' ? 'Copier la citation' : 'Copy quote'}
-          >
-            <Copy className="h-4 w-4 text-text-tertiary" />
-          </button>
-        </div>
-
-        {/* Topic breadcrumb */}
-        {(bilingualStatement.h1 || bilingualStatement.h2 || bilingualStatement.h3) && !isReply && (
-          <div className="mb-2 space-y-1">
-            {bilingualStatement.h1 && (
-              <div className="text-sm font-semibold text-accent-red">
-                {bilingualStatement.h1}
-              </div>
-            )}
-            {bilingualStatement.h2 && (
-              <div className="text-sm font-medium text-text-primary">
-                {bilingualStatement.h2}
-              </div>
-            )}
-            {bilingualStatement.h3 && (
-              <div className="text-sm text-text-secondary">
-                {bilingualStatement.h3}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Content */}
-        <div className="mb-3">
-          <div className="text-text-primary prose prose-sm max-w-none">
-            {(isExpanded ? content : preview).split('\n\n').map((paragraph: string, idx: number) => (
-              paragraph.trim() && (
-                <p key={idx} className="mb-2 last:mb-0">
-                  {paragraph}
-                </p>
-              )
-            ))}
-          </div>
-          {content.length > 500 && (
-            <button
-              onClick={() => setExpandedSpeech(isExpanded ? null : statement.id)}
-              className="text-sm text-accent-red hover:text-accent-red-hover font-medium mt-2"
-            >
-              {isExpanded
-                ? locale === 'fr'
-                  ? 'Afficher moins'
-                  : 'Show less'
-                : locale === 'fr'
-                ? 'Lire la suite'
-                : 'Read more'}
-            </button>
-          )}
-        </div>
-
-        {/* Footer badges */}
-        {(statement.statement_type || statement.procedural) && (
-          <div className="flex items-center gap-2 pt-3 border-t border-border-subtle">
-            {statement.statement_type && (
-              <span className="px-2 py-1 bg-bg-overlay rounded text-xs text-text-tertiary">
-                {statement.statement_type}
-              </span>
-            )}
-            {statement.procedural && (
-              <span className="px-2 py-1 bg-bg-overlay rounded text-xs text-text-tertiary">
-                {locale === 'fr' ? 'Procédural' : 'Procedural'}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Get party color for border
-  const getPartyColor = (statement: any) => {
-    // This is a simplified version - you'd extract party from who_en/who_fr
-    // or ideally have it as a separate field
-    return '#D71920'; // Default to Liberal red
-  };
 
   // Loading state
   if (loading) {
@@ -327,7 +167,13 @@ export default function DebateDetailPage() {
                 />
               );
             } else {
-              return renderStatement(thread.root);
+              return (
+                <StatementCard
+                  key={thread.root.id || idx}
+                  statement={thread.root}
+                  documentId={documentId}
+                />
+              );
             }
           })}
         </div>

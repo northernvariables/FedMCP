@@ -19,6 +19,12 @@ declare module 'next-auth' {
       createdAt?: string;
       usageResetDate?: string;
       linkedProviders?: string[];
+      isBetaTester?: boolean;
+      usesOwnKey?: boolean;
+      creditBalance?: number;
+      preferredMpId?: string | null;
+      postalCode?: string | null;
+      showMyMpSection?: boolean;
     };
   }
 
@@ -38,5 +44,11 @@ declare module 'next-auth/jwt' {
     createdAt?: string;
     usageResetDate?: string;
     linkedProviders?: string[];
+    isBetaTester?: boolean;
+    usesOwnKey?: boolean;
+    creditBalance?: number;
+    preferredMpId?: string | null;
+    postalCode?: string | null;
+    showMyMpSection?: boolean;
   }
 }

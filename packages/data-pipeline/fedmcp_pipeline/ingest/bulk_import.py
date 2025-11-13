@@ -161,6 +161,9 @@ class OpenParliamentBulkImporter:
 
                 mps_data = []
                 for row in cur:
+                    # Note: Using photo_url_source for OpenParliament headshot URLs
+                    # This preserves the auto-updated source URL without overwriting
+                    # any manually uploaded custom high-res photos in photo_url
                     mp_props = {
                         "id": row['slug'],
                         "name": row['name'],
@@ -169,7 +172,7 @@ class OpenParliamentBulkImporter:
                         "gender": row['gender'],
                         "party": row['party_short_name'] or row['party_name'],
                         "riding": row['riding_name'],
-                        "photo_url": row['headshot'],
+                        "photo_url_source": row['headshot'],  # OpenParliament source (auto-updated)
                         "updated_at": datetime.utcnow().isoformat(),
                     }
 

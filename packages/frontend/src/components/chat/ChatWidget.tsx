@@ -57,7 +57,8 @@ export function ChatWidget() {
     if (!user) return; // Skip if not authenticated
     checkQuota();
     refreshUsageStats();
-  }, [user, checkQuota, refreshUsageStats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]); // checkQuota and refreshUsageStats are stable Zustand store functions
 
   // Welcome flow for first-time users - DISABLED (auto-open removed)
   React.useEffect(() => {

@@ -16,6 +16,8 @@ export const MP_BASIC_FRAGMENT = gql`
     riding
     current
     cabinet_position
+    photo_url
+    photo_url_source
   }
 `;
 
@@ -325,7 +327,17 @@ export const GET_MP_SCORECARD = gql`
   query GetMPScorecard($mpId: ID!) {
     mpScorecard(mpId: $mpId) {
       mp {
-        ...MPBasic
+        id
+        name
+        given_name
+        family_name
+        party
+        riding
+        current
+        cabinet_position
+        email
+        phone
+        updated_at
       }
       bills_sponsored
       bills_passed
@@ -341,7 +353,6 @@ export const GET_MP_SCORECARD = gql`
       committee_activity_index
     }
   }
-  ${MP_BASIC_FRAGMENT}
 `;
 
 // TODO: Re-enable when GlobalExpenseStats type is implemented in graph-api schema
@@ -364,6 +375,7 @@ export const GET_MP_NEWS = gql`
       published_date
       description
       image_url
+      last_updated
     }
   }
 `;
@@ -705,12 +717,6 @@ export const GET_MP_SPEECHES = gql`
   query GetMPSpeeches($mpId: ID!, $limit: Int = 20, $documentType: String) {
     mpSpeeches(mpId: $mpId, limit: $limit, documentType: $documentType) {
       ...StatementBasic
-      partOf {
-        id
-        date
-        document_type
-        session_id
-      }
     }
   }
   ${STATEMENT_FRAGMENT}
@@ -785,8 +791,20 @@ export const GET_HANSARD_DOCUMENT = gql`
 `;
 
 export const GET_RECENT_DEBATES = gql`
-  query GetRecentDebates($limit: Int = 20, $documentType: String, $questionPeriodOnly: Boolean = false) {
-    recentDebates(limit: $limit, documentType: $documentType, questionPeriodOnly: $questionPeriodOnly) {
+  query GetRecentDebates(
+    $limit: Int = 20
+    $documentType: String
+    $questionPeriodOnly: Boolean = false
+    $startDate: String
+    $endDate: String
+  ) {
+    recentDebates(
+      limit: $limit
+      documentType: $documentType
+      questionPeriodOnly: $questionPeriodOnly
+      startDate: $startDate
+      endDate: $endDate
+    ) {
       document {
         id
         date
@@ -1206,9 +1224,216 @@ export const GET_DEBATE_WITH_STATEMENTS = gql`
         sequence_in_thread
         wordcount
         procedural
+        madeBy {
+          id
+          name
+          party
+          photo_url
+          photo_url_source
+        }
+        partOf {
+          id
+          date
+          document_type
+        }
       }
       sections
       statement_count
+    }
+  }
+`;
+
+export const GET_DEBATES_CALENDAR_DATA = gql`
+  query GetDebatesCalendarData($startDate: String!, $endDate: String!) {
+    debatesCalendarData(startDate: $startDate, endDate: $endDate) {
+      date
+      hasHouseDebates
+      hasQuestionPeriod
+      hasCommittee
+      hasScheduledMeeting
+      scheduledMeetings {
+        committee_code
+        committee_name
+        number
+        in_camera
+      }
+    }
+  }
+`;
+
+// ============================================
+// Written Questions Queries
+// ============================================
+
+export const GET_WRITTEN_QUESTIONS = gql`
+  query GetWrittenQuestions($limit: Int, $answered: Boolean, $mpId: ID, $session: String) {
+    writtenQuestions(limit: $limit, answered: $answered, mpId: $mpId, session: $session) {
+      id
+      time
+      who_en
+      who_fr
+      content_en
+      content_fr
+      h1_en
+      h2_en
+      h3_en
+      h1_fr
+      h2_fr
+      h3_fr
+      wordcount
+      answer {
+        id
+        time
+        who_en
+        who_fr
+        content_en
+        content_fr
+      }
+      madeBy {
+        id
+        name
+        party
+        riding
+        photo_url
+        photo_url_source
+      }
+      partOf {
+        id
+        date
+        document_type
+        session_id
+      }
+    }
+  }
+`;
+
+export const GET_MP_WRITTEN_QUESTIONS = gql`
+  query GetMPWrittenQuestions($mpId: ID!, $limit: Int, $session: String) {
+    mpWrittenQuestions(mpId: $mpId, limit: $limit, session: $session) {
+      id
+      time
+      who_en
+      who_fr
+      content_en
+      content_fr
+      h1_en
+      h2_en
+      h3_en
+      h1_fr
+      h2_fr
+      h3_fr
+      wordcount
+      answer {
+        id
+        time
+        who_en
+        who_fr
+        content_en
+        content_fr
+      }
+      madeBy {
+        id
+        name
+        party
+        riding
+        photo_url
+      }
+      partOf {
+        id
+        date
+        document_type
+        session_id
+      }
+    }
+  }
+`;
+
+export const GET_WRITTEN_QUESTION_SESSIONS = gql`
+  query GetWrittenQuestionSessions {
+    writtenQuestionSessions
+  }
+`;
+
+export const GET_MP_ANSWERED_QUESTIONS = gql`
+  query GetMPAnsweredQuestions($mpId: ID!, $limit: Int, $session: String) {
+    mpAnsweredQuestions(mpId: $mpId, limit: $limit, session: $session) {
+      question {
+        id
+        time
+        who_en
+        who_fr
+        content_en
+        content_fr
+        h1_en
+        h2_en
+        h3_en
+        h1_fr
+        h2_fr
+        h3_fr
+        wordcount
+        madeBy {
+          id
+          name
+          party
+          riding
+          photo_url
+        }
+      }
+      answer {
+        id
+        time
+        who_en
+        who_fr
+        content_en
+        content_fr
+      }
+      partOf {
+        id
+        date
+        document_type
+        session_id
+      }
+    }
+  }
+`;
+
+export const SEARCH_WRITTEN_QUESTIONS = gql`
+  query SearchWrittenQuestions($searchTerm: String!, $limit: Int, $language: String) {
+    searchWrittenQuestions(searchTerm: $searchTerm, limit: $limit, language: $language) {
+      id
+      time
+      who_en
+      who_fr
+      content_en
+      content_fr
+      h1_en
+      h2_en
+      h3_en
+      h1_fr
+      h2_fr
+      h3_fr
+      wordcount
+      answer {
+        id
+        time
+        who_en
+        who_fr
+        content_en
+        content_fr
+      }
+      madeBy {
+        id
+        name
+        party
+        riding
+        photo_url
+        photo_url_source
+      }
+      partOf {
+        id
+        date
+        document_type
+      }
     }
   }
 `;

@@ -15,11 +15,32 @@ interface NewsArticle {
   published_date?: string;
   description?: string;
   image_url?: string;
+  last_updated: string;
 }
 
 interface NewsArticlesProps {
   articles: NewsArticle[];
   loading?: boolean;
+}
+
+/**
+ * Calculate relative time from now (e.g., "5 minutes ago")
+ */
+function getRelativeTime(timestamp: string): string {
+  const now = new Date();
+  const then = new Date(timestamp);
+  const diffMs = now.getTime() - then.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins === 1) return '1 minute ago';
+  if (diffMins < 60) return `${diffMins} minutes ago`;
+  if (diffHours === 1) return '1 hour ago';
+  if (diffHours < 24) return `${diffHours} hours ago`;
+  if (diffDays === 1) return '1 day ago';
+  return `${diffDays} days ago`;
 }
 
 /**
@@ -62,8 +83,17 @@ export function NewsArticles({ articles, loading }: NewsArticlesProps) {
     );
   }
 
+  // Get the first article's last_updated timestamp (all articles from same fetch have same timestamp)
+  const lastUpdated = articles[0]?.last_updated;
+
   return (
     <div className="space-y-4">
+      {lastUpdated && (
+        <div className="flex items-center gap-2 text-sm text-text-tertiary pb-2 border-b border-border-subtle">
+          <Calendar className="h-4 w-4" />
+          <span>Last updated: {getRelativeTime(lastUpdated)}</span>
+        </div>
+      )}
       {articles.map((article, index) => (
         <a
           key={index}

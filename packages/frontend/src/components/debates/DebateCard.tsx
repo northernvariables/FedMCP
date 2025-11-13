@@ -3,6 +3,7 @@
 import { Calendar, MessageSquare, Users, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
+import { DebateWordCloud } from './DebateWordCloud';
 
 interface DebateSummary {
   document: {
@@ -11,6 +12,8 @@ interface DebateSummary {
     session_id: string;
     document_type: string;
     number: number;
+    keywords_en?: string;
+    keywords_fr?: string;
   };
   statement_count: number;
   speaker_count: number;
@@ -72,10 +75,14 @@ export function DebateCard({ debate }: DebateCardProps) {
   return (
     <Link
       href={`/${locale}/debates/${debate.document.id}`}
-      className="block p-6 rounded-lg bg-bg-elevated border border-border-subtle hover:border-accent-red/30 transition-all hover:shadow-md group"
+      className="block rounded-lg bg-bg-elevated border border-border-subtle hover:border-accent-red/30 transition-all hover:shadow-md group overflow-hidden"
     >
-      {/* Header: Date and Type */}
-      <div className="flex items-start justify-between mb-4">
+      {/* Two-column grid: Info left, Word cloud right */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+        {/* LEFT COLUMN: Existing Info */}
+        <div className="p-6">
+          {/* Header: Date and Type */}
+          <div className="flex items-start justify-between mb-4">
         <div>
           <div className="flex items-center gap-2 text-lg font-semibold text-text-primary mb-1">
             <Calendar className="h-5 w-5 text-accent-red" />
@@ -136,10 +143,23 @@ export function DebateCard({ debate }: DebateCardProps) {
             {locale === 'fr' ? (debate.speaker_count === 1 ? 'député' : 'députés') : (debate.speaker_count === 1 ? 'MP' : 'MPs')}
           </span>
         </div>
-        <div className="ml-auto flex items-center gap-1 text-accent-red font-medium group-hover:gap-2 transition-all">
-          {locale === 'fr' ? 'Voir le débat' : 'View Debate'}
-          <ChevronRight className="h-4 w-4" />
+            <div className="ml-auto flex items-center gap-1 text-accent-red font-medium group-hover:gap-2 transition-all">
+              {locale === 'fr' ? 'Voir le débat' : 'View Debate'}
+              <ChevronRight className="h-4 w-4" />
+            </div>
+          </div>
         </div>
+
+        {/* RIGHT COLUMN: Word Cloud (desktop only) */}
+        {(debate.document.keywords_en || debate.document.keywords_fr) && (
+          <div className="hidden lg:flex items-center justify-center bg-bg-base/50 p-6 border-l border-border-subtle">
+            <DebateWordCloud
+              keywords_en={debate.document.keywords_en}
+              keywords_fr={debate.document.keywords_fr}
+              compact={true}
+            />
+          </div>
+        )}
       </div>
     </Link>
   );

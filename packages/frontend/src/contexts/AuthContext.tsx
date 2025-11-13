@@ -22,6 +22,10 @@ interface UserProfile {
   usage_reset_date?: string;
   postal_code?: string | null;
   preferred_mp_id?: string | null;
+  is_beta_tester?: boolean;
+  uses_own_key?: boolean;
+  credit_balance?: number;
+  show_my_mp_section?: boolean;
 }
 
 interface AuthContextType {
@@ -51,6 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         monthly_usage: session.user.monthlyUsage,
         created_at: session.user.createdAt,
         usage_reset_date: session.user.usageResetDate,
+        postal_code: session.user.postalCode,
+        preferred_mp_id: session.user.preferredMpId,
+        is_beta_tester: session.user.isBetaTester,
+        uses_own_key: session.user.usesOwnKey,
+        credit_balance: session.user.creditBalance,
+        show_my_mp_section: session.user.showMyMpSection,
       }
     : null;
 

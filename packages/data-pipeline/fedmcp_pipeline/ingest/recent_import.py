@@ -235,15 +235,13 @@ class RecentDataImporter:
 
         # Import expenses (last 2 years)
         logger.info("\n6. Importing MP expenses (2023-present)...")
-        from .finances import ingest_mp_expenses
+        from .finances import ingest_financial_data
         try:
-            expense_stats = ingest_mp_expenses(
+            expense_stats = ingest_financial_data(
                 self.neo4j,
-                fiscal_year=2026,  # Current year
-                quarter=1,
                 batch_size=batch_size
             )
-            stats["expenses"] = expense_stats
+            stats["expenses"] = expense_stats.get("expenses", 0)
         except Exception as e:
             logger.warning(f"Failed to import expenses: {e}")
             stats["expenses"] = 0

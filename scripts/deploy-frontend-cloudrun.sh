@@ -58,6 +58,7 @@ echo -e "${YELLOW}  - supabase-service-role-key${NC}"
 echo -e "${YELLOW}  - canadagpt-auth-secret${NC}"
 echo -e "${YELLOW}  - google-client-id, google-client-secret (OAuth)${NC}"
 echo -e "${YELLOW}  - encryption-key${NC}"
+echo -e "${YELLOW}  - stripe-secret-key, stripe-publishable-key, stripe-webhook-secret${NC}"
 echo ""
 
 # Configure Docker for Artifact Registry
@@ -131,8 +132,8 @@ gcloud run deploy ${SERVICE_NAME} \
   --cpu=1 \
   --timeout=60 \
   --service-account=canadagpt-frontend-sa@canada-gpt-ca.iam.gserviceaccount.com \
-  --set-env-vars="NEXT_PUBLIC_GRAPHQL_URL=${GRAPHQL_URL},NEXT_PUBLIC_GRAPHQL_API_KEY=9587c9820b109977a43a9302c23d051d98eff56050581eab63784b0b7f08152d,NEXT_PUBLIC_BASE_URL=${BASE_URL},AUTH_TRUST_HOST=true,NEXTAUTH_URL=${BASE_URL},NODE_ENV=production" \
-  --set-secrets="NEXT_PUBLIC_SUPABASE_URL=supabase-url:latest,NEXT_PUBLIC_SUPABASE_ANON_KEY=supabase-anon-key:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,AUTH_SECRET=canadagpt-auth-secret:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,GITHUB_CLIENT_ID=github-client-id:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest,FACEBOOK_CLIENT_ID=facebook-client-id:latest,FACEBOOK_CLIENT_SECRET=facebook-client-secret:latest,LINKEDIN_CLIENT_ID=linkedin-client-id:latest,LINKEDIN_CLIENT_SECRET=linkedin-client-secret:latest,ENCRYPTION_KEY=encryption-key:latest" \
+  --set-env-vars="NEXT_PUBLIC_GRAPHQL_URL=${GRAPHQL_URL},NEXT_PUBLIC_GRAPHQL_API_KEY=9587c9820b109977a43a9302c23d051d98eff56050581eab63784b0b7f08152d,NEXT_PUBLIC_BASE_URL=${BASE_URL},NEXT_PUBLIC_APP_URL=${BASE_URL},AUTH_TRUST_HOST=true,NEXTAUTH_URL=${BASE_URL},NODE_ENV=production" \
+  --set-secrets="NEXT_PUBLIC_SUPABASE_URL=supabase-url:latest,NEXT_PUBLIC_SUPABASE_ANON_KEY=supabase-anon-key:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,AUTH_SECRET=canadagpt-auth-secret:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,GITHUB_CLIENT_ID=github-client-id:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest,FACEBOOK_CLIENT_ID=facebook-client-id:latest,FACEBOOK_CLIENT_SECRET=facebook-client-secret:latest,LINKEDIN_CLIENT_ID=linkedin-client-id:latest,LINKEDIN_CLIENT_SECRET=linkedin-client-secret:latest,ENCRYPTION_KEY=encryption-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=stripe-publishable-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest" \
   --port=3000
 
 echo ""

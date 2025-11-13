@@ -28,6 +28,10 @@ export const typeDefs = `#graphql
     ourcommons_url: String
     cabinet_position: String
 
+    # Photo URLs - Two-tier approach for graceful fallback
+    photo_url_source: String  # OpenParliament URL (auto-updated by ingestion)
+    photo_url: String  # Custom high-res GCS URL (manually upgraded, takes precedence)
+
     # House of Commons seating information
     parl_mp_id: Int  # House of Commons PersonId for matching
     seat_row: Int  # Row number in chamber (1-12 across both sides)
@@ -291,6 +295,33 @@ export const typeDefs = `#graphql
     parent_statement_id: Int  # ID of statement this replies to
     sequence_in_thread: Int  # Order within conversation (0 = root)
 
+    # Government response (for written questions)
+    # Finds the matching government response by looking for a Statement with:
+    # - Same h3_en (question number)
+    # - Same document_id (same Hansard sitting)
+    # - Liberal party member (government response) - must end with 'Lib.)'
+    # Returns all answer fields in a single query (more efficient than 6 separate queries)
+    answer: WrittenQuestionAnswer
+      @cypher(
+        statement: """
+        OPTIONAL MATCH (a:Statement)
+        WHERE a.h3_en = this.h3_en
+          AND a.document_id = this.document_id
+          AND a.who_en ENDS WITH 'Lib.)'
+        WITH a
+        LIMIT 1
+        RETURN {
+          id: toString(a.id),
+          time: a.time,
+          who_en: a.who_en,
+          who_fr: a.who_fr,
+          content_en: a.content_en,
+          content_fr: a.content_fr
+        } AS result
+        """
+        columnName: "result"
+      )
+
     # Relationships
     madeBy: MP @relationship(type: "MADE_BY", direction: OUT)
     partOf: Document @relationship(type: "PART_OF", direction: OUT)
@@ -329,6 +360,15 @@ export const typeDefs = `#graphql
     hasHouseDebates: Boolean!
     hasQuestionPeriod: Boolean!
     hasCommittee: Boolean!
+    hasScheduledMeeting: Boolean!
+    scheduledMeetings: [ScheduledMeetingInfo!]!
+  }
+
+  type ScheduledMeetingInfo {
+    committee_code: String!
+    committee_name: String!
+    number: Int!
+    in_camera: Boolean!
   }
 
   type DebateDetail {
@@ -345,6 +385,22 @@ export const typeDefs = `#graphql
     document_type: String
     number: Int
     xml_source_url: String
+  }
+
+  type MPInfo {
+    id: ID!
+    name: String
+    party: String
+    riding: String
+    photo_url: String
+    photo_url_source: String
+  }
+
+  # Written question with answer (for government MP pages)
+  type WrittenQuestionWithAnswer {
+    question: StatementInfo!
+    answer: WrittenQuestionAnswer!
+    partOf: DocumentInfo!
   }
 
   type StatementInfo {
@@ -367,6 +423,17 @@ export const typeDefs = `#graphql
     sequence_in_thread: Int
     wordcount: Int
     procedural: Boolean
+    madeBy: MPInfo
+    partOf: DocumentInfo
+  }
+
+  type WrittenQuestionAnswer {
+    id: String
+    time: DateTime
+    who_en: String
+    who_fr: String
+    content_en: String
+    content_fr: String
   }
 
   type Committee @node {
@@ -1200,6 +1267,211 @@ export const typeDefs = `#graphql
         columnName: "s"
       )
 
+    # Get written questions (Questions on the Order Paper)
+    writtenQuestions(
+      limit: Int = 50
+      answered: Boolean  # Filter by whether question has an answer
+      mpId: ID  # Filter by MP who asked
+      session: String  # Filter by parliamentary session (e.g., "45-1")
+    ): [Statement!]!
+      @cypher(
+        statement: """
+        MATCH (s:Statement)-[:PART_OF]->(d:Document)
+        WHERE s.h2_en CONTAINS 'Questions on the Order Paper'
+          AND s.h3_en IS NOT NULL
+          AND s.h3_en <> ''
+          AND s.h3_en CONTAINS 'Question No'
+          AND NOT s.who_en CONTAINS 'Lib.'
+          AND s.who_en IS NOT NULL
+          AND s.who_en <> ''
+          AND ($mpId IS NULL OR EXISTS((s)<-[:MADE_BY]-(:MP {id: $mpId})))
+          AND ($session IS NULL OR d.session_id = $session)
+
+        # Filter by answered status if requested
+        OPTIONAL MATCH (a:Statement)
+        WHERE a.h3_en = s.h3_en
+          AND a.document_id = s.document_id
+          AND a.who_en CONTAINS 'Lib.'
+
+        WITH s, a
+        WHERE $answered IS NULL OR ($answered = true AND a IS NOT NULL) OR ($answered = false AND a IS NULL)
+
+        WITH s
+        ORDER BY s.time DESC
+        LIMIT $limit
+
+        RETURN s
+        """
+        columnName: "s"
+      )
+
+    # Get written questions asked by a specific MP
+    # Optional session parameter filters to specific parliamentary session (e.g., "45-1")
+    mpWrittenQuestions(
+      mpId: ID!
+      limit: Int = 50
+      session: String
+    ): [Statement!]!
+      @cypher(
+        statement: """
+        MATCH (mp:MP {id: $mpId})<-[:MADE_BY]-(s:Statement)-[:PART_OF]->(d:Document)
+        WHERE s.h2_en CONTAINS 'Questions on the Order Paper'
+          AND s.h3_en IS NOT NULL
+          AND s.h3_en <> ''
+          AND s.h3_en CONTAINS 'Question No'
+          AND ($session IS NULL OR d.session_id = $session)
+
+        WITH s
+        ORDER BY s.time DESC
+        LIMIT $limit
+
+        RETURN s
+        """
+        columnName: "s"
+      )
+
+    # Get list of parliamentary sessions that have written questions
+    # Returns session IDs like "45-1", "44-1", etc. in descending order
+    writtenQuestionSessions: [String!]!
+      @cypher(
+        statement: """
+        MATCH (s:Statement)-[:PART_OF]->(d:Document)
+        WHERE s.h2_en CONTAINS 'Questions on the Order Paper'
+          AND s.h3_en CONTAINS 'Question No'
+          AND d.session_id IS NOT NULL
+        WITH DISTINCT d.session_id AS session_id
+        ORDER BY session_id DESC
+        RETURN session_id
+        """
+        columnName: "session_id"
+      )
+
+    # Get written questions answered by a government MP
+    # Returns opposition questions with this MP's answers
+    # For use on Liberal/government MP pages
+    mpAnsweredQuestions(
+      mpId: ID!
+      limit: Int = 50
+      session: String
+    ): [WrittenQuestionWithAnswer!]!
+      @cypher(
+        statement: """
+        MATCH (mp:MP {id: $mpId})
+
+        // Find answers provided by this government MP
+        MATCH (mp)<-[:MADE_BY]-(answer:Statement)-[:PART_OF]->(d:Document)
+        WHERE answer.h2_en CONTAINS 'Questions on the Order Paper'
+          AND answer.h3_en IS NOT NULL
+          AND answer.h3_en <> ''
+          AND answer.h3_en CONTAINS 'Question No'
+          AND answer.who_en CONTAINS 'Lib.'
+          AND ($session IS NULL OR d.session_id = $session)
+
+        // Find the original opposition question for each answer
+        MATCH (question:Statement)-[:PART_OF]->(d)
+        WHERE question.h3_en = answer.h3_en
+          AND NOT question.who_en CONTAINS 'Lib.'
+
+        // Get the MP who made the question
+        OPTIONAL MATCH (question)-[:MADE_BY]->(question_mp:MP)
+
+        WITH question, answer, d, question_mp
+        ORDER BY answer.time DESC
+        LIMIT $limit
+
+        RETURN {
+          question: {
+            id: toString(question.id),
+            time: question.time,
+            who_en: question.who_en,
+            who_fr: question.who_fr,
+            content_en: question.content_en,
+            content_fr: question.content_fr,
+            h1_en: question.h1_en,
+            h1_fr: question.h1_fr,
+            h2_en: question.h2_en,
+            h2_fr: question.h2_fr,
+            h3_en: question.h3_en,
+            h3_fr: question.h3_fr,
+            statement_type: question.statement_type,
+            politician_id: question.politician_id,
+            thread_id: question.thread_id,
+            parent_statement_id: question.parent_statement_id,
+            sequence_in_thread: question.sequence_in_thread,
+            wordcount: question.wordcount,
+            procedural: question.procedural,
+            madeBy: CASE WHEN question_mp IS NOT NULL THEN {
+              id: question_mp.id,
+              name: question_mp.name,
+              party: question_mp.party,
+              riding: question_mp.riding,
+              photo_url: question_mp.photo_url,
+              photo_url_source: question_mp.photo_url_source
+            } ELSE null END,
+            partOf: {
+              id: toString(d.id),
+              date: d.date,
+              session_id: d.session_id,
+              document_type: d.document_type,
+              number: d.number,
+              xml_source_url: d.xml_source_url
+            }
+          },
+          answer: {
+            id: toString(answer.id),
+            time: answer.time,
+            who_en: answer.who_en,
+            who_fr: answer.who_fr,
+            content_en: answer.content_en,
+            content_fr: answer.content_fr
+          },
+          partOf: {
+            id: toString(d.id),
+            date: d.date,
+            session_id: d.session_id,
+            document_type: d.document_type,
+            number: d.number,
+            xml_source_url: d.xml_source_url
+          }
+        } AS result
+        """
+        columnName: "result"
+      )
+
+    # Search written questions by keyword
+    searchWrittenQuestions(
+      searchTerm: String!
+      limit: Int = 50
+      language: String = "en"
+    ): [Statement!]!
+      @cypher(
+        statement: """
+        CALL {
+          WITH $searchTerm AS query, $language AS language
+          CALL db.index.fulltext.queryNodes(
+            CASE WHEN language = 'fr' THEN 'statement_content_fr' ELSE 'statement_content_en' END,
+            query
+          ) YIELD node, score
+          RETURN node, score
+        }
+        WITH node AS s, score
+        WHERE s.h2_en CONTAINS 'Questions on the Order Paper'
+          AND s.h3_en IS NOT NULL
+          AND s.h3_en <> ''
+          AND s.h3_en CONTAINS 'Question No'
+          AND NOT s.who_en CONTAINS 'Lib.'
+          AND s.who_en IS NOT NULL
+          AND s.who_en <> ''
+
+        WITH s, score
+        ORDER BY score DESC, s.time DESC
+        LIMIT $limit
+
+        RETURN s
+        """
+        columnName: "s"
+      )
+
     # Get a specific Hansard document with all its statements
     hansardDocument(id: ID!): Document
       @cypher(
@@ -1223,8 +1495,8 @@ export const typeDefs = `#graphql
         MATCH (d:Document)
         WHERE d.public = true
           AND ($documentType IS NULL OR d.document_type = $documentType)
-          AND ($startDate IS NULL OR d.date >= date($startDate))
-          AND ($endDate IS NULL OR d.date <= date($endDate))
+          AND ($startDate IS NULL OR d.date >= $startDate)
+          AND ($endDate IS NULL OR d.date <= $endDate)
         OPTIONAL MATCH (d)<-[:PART_OF]-(s:Statement)
         WITH d, s
         WHERE NOT $questionPeriodOnly OR s.h1_en CONTAINS 'Oral Question' OR s.h1_en CONTAINS 'Question Period'
@@ -1262,6 +1534,7 @@ export const typeDefs = `#graphql
         MATCH (d)<-[:PART_OF]-(s:Statement)
         WITH d, s
         ORDER BY s.time ASC
+        OPTIONAL MATCH (s)-[:MADE_BY]->(mp:MP)
         WITH d,
              collect({
                id: s.id,
@@ -1279,7 +1552,19 @@ export const typeDefs = `#graphql
                parent_statement_id: s.parent_statement_id,
                sequence_in_thread: s.sequence_in_thread,
                wordcount: s.wordcount,
-               procedural: s.procedural
+               procedural: s.procedural,
+               madeBy: CASE WHEN mp IS NOT NULL THEN {
+                 id: mp.id,
+                 name: mp.name,
+                 party: mp.party,
+                 photo_url: mp.photo_url,
+                photo_url_source: mp.photo_url_source
+               } ELSE null END,
+               partOf: {
+                 id: d.id,
+                 date: d.date,
+                 document_type: d.document_type
+               }
              }) AS statements,
              count(DISTINCT s.h1_en) AS section_count,
              collect(DISTINCT s.h1_en) AS sections
@@ -1301,39 +1586,11 @@ export const typeDefs = `#graphql
       )
 
     # Get calendar data for debates (for calendar view)
+    # Custom resolver in server.ts that merges Neo4j data with OpenParliament scheduled meetings
     debatesCalendarData(
       startDate: String!
       endDate: String!
     ): [DebateCalendarDay!]!
-      @cypher(
-        statement: """
-        MATCH (d:Document)
-        WHERE d.public = true
-          AND d.date >= date($startDate)
-          AND d.date <= date($endDate)
-        OPTIONAL MATCH (d)<-[:PART_OF]-(s:Statement)
-        WITH d,
-             ANY(stmt IN collect(s.h1_en) WHERE stmt CONTAINS 'Oral Question' OR stmt CONTAINS 'Question Period') AS has_qp_statements
-        WITH d.date AS debate_date,
-             collect({
-               doc_type: d.document_type,
-               has_qp: has_qp_statements
-             }) AS docs
-        WITH debate_date,
-             ANY(doc IN docs WHERE doc.doc_type = 'D' AND NOT doc.has_qp) AS hasHouseDebates,
-             ANY(doc IN docs WHERE doc.doc_type = 'D' AND doc.has_qp) AS hasQuestionPeriod,
-             ANY(doc IN docs WHERE doc.doc_type = 'E') AS hasCommittee
-        WHERE hasHouseDebates OR hasQuestionPeriod OR hasCommittee
-        RETURN {
-          date: toString(debate_date),
-          hasHouseDebates: hasHouseDebates,
-          hasQuestionPeriod: hasQuestionPeriod,
-          hasCommittee: hasCommittee
-        } AS calendar_day
-        ORDER BY debate_date ASC
-        """
-        columnName: "calendar_day"
-      )
 
     # Question Period debates only
     questionPeriodDebates(

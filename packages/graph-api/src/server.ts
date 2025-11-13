@@ -20,6 +20,103 @@ export interface ServerContext {
   auth: AuthContext;
 }
 
+// Cache for OpenParliament API calls (1 hour TTL)
+const openParliamentCache = new Map<string, { data: any; expires: number }>();
+
+/**
+ * Fetch scheduled committee meetings from OpenParliament API
+ */
+async function fetchScheduledMeetings(startDate: string, endDate: string): Promise<any[]> {
+  const cacheKey = `meetings-${startDate}-${endDate}`;
+  const cached = openParliamentCache.get(cacheKey);
+
+  if (cached && cached.expires > Date.now()) {
+    return cached.data;
+  }
+
+  try {
+    const url = `https://api.openparliament.ca/committees/meetings/?date__gte=${startDate}&date__lte=${endDate}&limit=1000`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'CanadaGPT/1.0 (contact@canadagpt.ca)',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`OpenParliament API error: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    const meetings = data.objects || [];
+
+    // Filter for scheduled meetings only (no evidence yet)
+    const scheduledMeetings = meetings.filter((m: any) => !m.has_evidence);
+
+    // Cache for 1 hour
+    openParliamentCache.set(cacheKey, {
+      data: scheduledMeetings,
+      expires: Date.now() + 60 * 60 * 1000,
+    });
+
+    return scheduledMeetings;
+  } catch (error) {
+    console.error('Error fetching scheduled meetings:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch committee metadata for display names
+ */
+async function fetchCommitteeNames(): Promise<Map<string, string>> {
+  const cacheKey = 'committee-names';
+  const cached = openParliamentCache.get(cacheKey);
+
+  if (cached && cached.expires > Date.now()) {
+    return cached.data;
+  }
+
+  try {
+    const url = 'https://api.openparliament.ca/committees/?limit=1000';
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'CanadaGPT/1.0 (contact@canadagpt.ca)',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`OpenParliament API error: ${response.status}`);
+      return new Map();
+    }
+
+    const data = await response.json();
+    const committees = data.objects || [];
+
+    const nameMap = new Map<string, string>();
+    committees.forEach((c: any) => {
+      // Extract short code from URL like "/committees/finance/" -> "finance"
+      const match = c.url.match(/\/committees\/([^\/]+)\//);
+      if (match) {
+        nameMap.set(match[1], c.short_name.en || c.name.en);
+      }
+    });
+
+    // Cache for 1 hour
+    openParliamentCache.set(cacheKey, {
+      data: nameMap,
+      expires: Date.now() + 60 * 60 * 1000,
+    });
+
+    return nameMap;
+  } catch (error) {
+    console.error('Error fetching committee names:', error);
+    return new Map();
+  }
+}
+
 /**
  * Create GraphQL schema with Neo4j integration
  */
@@ -34,7 +131,21 @@ export function createGraphQLSchema() {
         mpNews: async (_parent: unknown, args: { mpName: string; limit?: number }) => {
           const { mpName } = args;
           const limit = validateLimit(args.limit, DEFAULT_LIMITS.top);
-          return await fetchMPNews(mpName, limit);
+
+          // Create cache key with validated limit
+          const cacheKey = createCacheKey('mpNews', { mpName, limit });
+          const cached = queryCache.get(cacheKey);
+
+          if (cached) {
+            return cached;
+          }
+
+          const news = await fetchMPNews(mpName, limit);
+
+          // Cache for 5 minutes (300 seconds)
+          queryCache.set(cacheKey, news, 300);
+
+          return news;
         },
 
         // Cached randomMPs query (5 minute TTL)
@@ -106,18 +217,7 @@ export function createGraphQLSchema() {
               WHERE $fiscalYear IS NULL OR e.fiscal_year = $fiscalYear
               WITH mp, sum(e.amount) AS total_expenses
               RETURN {
-                mp: {
-                  id: mp.id,
-                  name: mp.name,
-                  given_name: mp.given_name,
-                  family_name: mp.family_name,
-                  party: mp.party,
-                  riding: mp.riding,
-                  current: mp.current,
-                  email: mp.email,
-                  phone: mp.phone,
-                  updated_at: mp.updated_at
-                },
+                mp: mp,
                 total_expenses: total_expenses
               } AS summary
               ORDER BY total_expenses DESC
@@ -132,6 +232,113 @@ export function createGraphQLSchema() {
             queryCache.set(cacheKey, summaries, 3600);
 
             return summaries;
+          } finally {
+            await session.close();
+          }
+        },
+
+        // Custom resolver for calendar data with scheduled meetings
+        debatesCalendarData: async (_parent: unknown, args: { startDate: string; endDate: string }, context: any) => {
+          const { startDate, endDate } = args;
+
+          // 1. Fetch historical debate data from Neo4j
+          const session = driver.session();
+          try {
+            const result = await session.run(
+              `
+              MATCH (d:Document)
+              WHERE d.public = true
+                AND d.date >= $startDate
+                AND d.date <= $endDate
+              OPTIONAL MATCH (d)<-[:PART_OF]-(s:Statement)
+              WITH d,
+                   ANY(stmt IN collect(s.h1_en) WHERE stmt CONTAINS 'Oral Question' OR stmt CONTAINS 'Question Period') AS has_qp_statements
+              WITH d.date AS debate_date,
+                   collect({
+                     doc_type: d.document_type,
+                     has_qp: has_qp_statements
+                   }) AS docs
+              WITH debate_date,
+                   ANY(doc IN docs WHERE doc.doc_type = 'D' AND NOT doc.has_qp) AS hasHouseDebates,
+                   ANY(doc IN docs WHERE doc.doc_type = 'D' AND doc.has_qp) AS hasQuestionPeriod,
+                   ANY(doc IN docs WHERE doc.doc_type = 'E') AS hasCommittee
+              WHERE hasHouseDebates OR hasQuestionPeriod OR hasCommittee
+              RETURN debate_date AS date,
+                     hasHouseDebates,
+                     hasQuestionPeriod,
+                     hasCommittee
+              ORDER BY debate_date ASC
+              `,
+              { startDate, endDate }
+            );
+
+            // Convert Neo4j results to map
+            const neo4jDataMap = new Map<string, any>();
+            result.records.forEach(record => {
+              const date = record.get('date');
+              neo4jDataMap.set(date, {
+                date,
+                hasHouseDebates: record.get('hasHouseDebates'),
+                hasQuestionPeriod: record.get('hasQuestionPeriod'),
+                hasCommittee: record.get('hasCommittee'),
+              });
+            });
+
+            // 2. Fetch scheduled meetings from OpenParliament API
+            const scheduledMeetings = await fetchScheduledMeetings(startDate, endDate);
+            const committeeNames = await fetchCommitteeNames();
+
+            // 3. Group scheduled meetings by date
+            const meetingsByDate = new Map<string, any[]>();
+            scheduledMeetings.forEach((meeting: any) => {
+              const date = meeting.date;
+              if (!meetingsByDate.has(date)) {
+                meetingsByDate.set(date, []);
+              }
+
+              // Extract committee code from URL
+              const match = meeting.committee_url.match(/\/committees\/([^\/]+)\//);
+              const committeeCode = match ? match[1] : 'unknown';
+              const committeeName = committeeNames.get(committeeCode) || committeeCode;
+
+              meetingsByDate.get(date)!.push({
+                committee_code: committeeCode,
+                committee_name: committeeName,
+                number: meeting.number,
+                in_camera: meeting.in_camera,
+              });
+            });
+
+            // 4. Merge Neo4j data with scheduled meetings
+            const allDates = new Set([...neo4jDataMap.keys(), ...meetingsByDate.keys()]);
+            const mergedData = Array.from(allDates).map(date => {
+              const neo4jData = neo4jDataMap.get(date) || {
+                date,
+                hasHouseDebates: false,
+                hasQuestionPeriod: false,
+                hasCommittee: false,
+              };
+
+              const scheduled = meetingsByDate.get(date) || [];
+
+              return {
+                date,
+                hasHouseDebates: neo4jData.hasHouseDebates,
+                hasQuestionPeriod: neo4jData.hasQuestionPeriod,
+                hasCommittee: neo4jData.hasCommittee,
+                hasScheduledMeeting: scheduled.length > 0,
+                scheduledMeetings: scheduled,
+              };
+            });
+
+            // Sort by date
+            mergedData.sort((a, b) => a.date.localeCompare(b.date));
+
+            return mergedData;
+          } catch (error) {
+            console.error('Error in debatesCalendarData resolver:', error);
+            // Return empty array on error
+            return [];
           } finally {
             await session.close();
           }

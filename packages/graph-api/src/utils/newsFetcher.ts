@@ -12,6 +12,7 @@ export interface NewsArticle {
   published_date: string | null;
   description: string;
   image_url: string | null;
+  last_updated: string;
 }
 
 // Canadian news sources for relevance filtering
@@ -53,6 +54,9 @@ export async function fetchMPNews(
   limit: number = 10
 ): Promise<NewsArticle[]> {
   try {
+    // Capture timestamp when fetch occurs
+    const lastUpdated = new Date().toISOString();
+
     // Build search query - add "Canada" and "MP" for relevance
     const searchQuery = `"${mpName}" MP Canada`;
 
@@ -153,6 +157,7 @@ export async function fetchMPNews(
           published_date: publishedDate,
           description,
           image_url: imageUrl,
+          last_updated: lastUpdated,
         };
       });
 

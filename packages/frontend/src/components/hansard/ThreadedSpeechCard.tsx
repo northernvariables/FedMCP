@@ -7,6 +7,7 @@
 
 import React, { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
+import Link from 'next/link';
 import { ChevronDown, ChevronUp, MessageSquare, User, Calendar, Hash, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
@@ -16,6 +17,8 @@ import { PrintableCard } from '../PrintableCard';
 import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 import { useChatStore } from '@/lib/stores/chatStore';
 import { BookmarkButton } from '../bookmarks/BookmarkButton';
+import { useAuth } from '@/contexts/AuthContext';
+import { detectMotionOutcome, getMotionBadgeColors } from '@/lib/utils/motionDetector';
 
 interface Statement {
   id: string;
@@ -30,6 +33,7 @@ interface Statement {
   h3_fr?: string;
   statement_type?: string;
   wordcount?: number;
+  procedural?: boolean;
   madeBy?: {
     id: string;
     name: string;
@@ -47,9 +51,20 @@ interface ThreadedSpeechCardProps {
   showContext?: boolean;
   onStatementClick?: (statement: Statement) => void;
   className?: string;
+  variant?: 'partisan' | 'neutral'; // Partisan: party colors, Neutral: gray
 }
 
-// Party color mapping
+// Neutral color scheme (for search results, MP pages)
+const getNeutralColors = () => {
+  return {
+    bg: 'bg-gray-50/80 dark:bg-gray-900/30',
+    border: 'border-gray-300 dark:border-gray-700',
+    line: 'stroke-gray-400',
+    badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  };
+};
+
+// Party color mapping (for debates, committee pages)
 const getPartyColors = (party: string) => {
   const partyLower = party?.toLowerCase() || '';
 
@@ -126,24 +141,45 @@ const StatementCard = React.memo(function StatementCard({
   statement,
   isReply = false,
   onClick,
+  variant = 'partisan',
 }: {
   statement: Statement;
   isReply?: boolean;
   onClick?: () => void;
+  variant?: 'partisan' | 'neutral';
 }) {
   const locale = useLocale();
   const dateLocale = locale === 'fr' ? fr : enUS;
   const bilingualStatement = getBilingualContent(statement, locale);
+  const { user } = useAuth();
 
   const [isFactChecking, setIsFactChecking] = useState(false);
   const { sendMessage, toggleOpen, setContext, isOpen } = useChatStore();
 
+  // Check if user has PRO tier or is beta tester
+  const hasFactCheckAccess = user?.subscription_tier === 'PRO' ||
+                             user?.subscription_tier === 'BETA' ||
+                             user?.is_beta_tester === true;
+
+  // Check if this is the Speaker of the House
+  const isSpeaker = bilingualStatement.who?.toLowerCase().includes('speaker') ||
+                    statement.madeBy?.name?.toLowerCase().includes('speaker');
+
   const party = statement.madeBy?.party || '';
-  const colors = getPartyColors(party);
+  // Use neutral colors if variant is neutral OR if speaker, otherwise use party colors
+  const colors = (variant === 'neutral' || isSpeaker) ? getNeutralColors() : getPartyColors(party);
   const typeBadge = getStatementTypeBadge(statement.statement_type);
 
-  // Get photo URL from GCS or fallback to ID-based construction
-  const photoUrl = statement.madeBy ? getMPPhotoUrl(statement.madeBy) : null;
+  // Detect motion outcome (only check procedural statements for performance)
+  const motionResult = statement.procedural
+    ? detectMotionOutcome(bilingualStatement.content, locale as 'en' | 'fr')
+    : { hasMotion: false, outcome: null, displayText: null };
+
+  // Get MP photo - prioritize GCS URL from getMPPhotoUrl
+  // Only use photo_url if it's a full URL (starts with http)
+  const photoUrl = statement.madeBy?.id
+    ? getMPPhotoUrl(statement.madeBy)
+    : (statement.madeBy?.photo_url?.startsWith('http') ? statement.madeBy.photo_url : null);
   const [imageError, setImageError] = React.useState(false);
 
   // Share data - use dedicated share route for rich social media previews
@@ -246,24 +282,26 @@ Use Hansard records, bills, votes, and other parliamentary data to support your 
     >
       {/* Action Buttons - Top Right */}
       <div className="absolute top-3 right-3 z-20 flex gap-2" onClick={(e) => e.stopPropagation()}>
-        {/* Fact-Check Button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleFactCheck();
-          }}
-          disabled={isFactChecking}
-          className={`rounded-lg border-2 p-2 shadow-md transition-colors
-                      bg-white dark:bg-gray-900
-                      ${isFactChecking
-                        ? 'border-accent-blue text-accent-blue animate-pulse cursor-wait shadow-lg'
-                        : 'border-border text-text-secondary hover:text-accent-blue hover:border-accent-blue hover:shadow-lg'
-                      }`}
-          title="Fact-check this statement"
-          aria-label="Fact-check this statement"
-        >
-          <CheckCircle size={18} />
-        </button>
+        {/* Fact-Check Button - PRO tier only */}
+        {hasFactCheckAccess && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleFactCheck();
+            }}
+            disabled={isFactChecking}
+            className={`rounded-lg border-2 p-2 shadow-md transition-colors
+                        bg-white dark:bg-gray-900
+                        ${isFactChecking
+                          ? 'border-accent-blue text-accent-blue animate-pulse cursor-wait shadow-lg'
+                          : 'border-border text-text-secondary hover:text-accent-blue hover:border-accent-blue hover:shadow-lg'
+                        }`}
+            title="Fact-check this statement"
+            aria-label="Fact-check this statement"
+          >
+            <CheckCircle size={18} />
+          </button>
+        )}
 
         {/* Bookmark Button */}
         <BookmarkButton
@@ -298,26 +336,42 @@ Use Hansard records, bills, votes, and other parliamentary data to support your 
       <div className="flex items-start justify-between gap-3 mb-3 pr-40">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Avatar */}
-          {photoUrl && !imageError ? (
-            <img
-              src={photoUrl}
-              alt={statement.madeBy?.name || 'MP'}
-              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-              style={{ objectPosition: 'center -3px' }}
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-lg bg-bg-tertiary flex items-center justify-center flex-shrink-0">
-              <User className="h-5 w-5 text-text-tertiary" />
-            </div>
-          )}
+          {/* MP Photo */}
+          <div className="relative w-16 h-16 flex-shrink-0">
+            {photoUrl && !imageError ? (
+              <img
+                src={photoUrl}
+                alt={statement.madeBy?.name || 'MP'}
+                className="w-16 h-16 rounded-lg object-contain"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-bg-tertiary flex items-center justify-center">
+                <User className="h-8 w-8 text-text-tertiary" />
+              </div>
+            )}
+          </div>
 
           {/* Speaker info */}
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">
-              {statement.madeBy?.name || bilingualStatement.who || 'Unknown Speaker'}
-            </div>
+            {statement.madeBy?.id ? (
+              <Link
+                href={`/${locale}/mps/${statement.madeBy.id}`}
+                className="font-semibold text-gray-900 dark:text-gray-100 hover:text-accent-red dark:hover:text-accent-red transition-colors truncate block"
+              >
+                {statement.madeBy.name || bilingualStatement.who || 'Unknown Speaker'}
+              </Link>
+            ) : (
+              <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                {statement.madeBy?.name || bilingualStatement.who || 'Unknown Speaker'}
+              </div>
+            )}
             <div className="flex items-center gap-2 flex-wrap text-xs text-gray-700 dark:text-gray-300">
+              {isSpeaker && (
+                <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-200 font-medium">
+                  {locale === 'fr' ? 'Président de la Chambre' : 'Speaker of the House'}
+                </span>
+              )}
               {party && (
                 <span className={`px-2 py-0.5 rounded-full ${colors.badge} font-medium`}>
                   {party}
@@ -329,25 +383,30 @@ Use Hansard records, bills, votes, and other parliamentary data to support your 
                 </span>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Metadata */}
-        <div className="flex flex-col items-end gap-1 text-xs text-gray-600 dark:text-gray-400 flex-shrink-0">
-          {statement.time && (
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              <time dateTime={statement.time}>
-                {format(new Date(statement.time), 'PPp', { locale: dateLocale })}
-              </time>
+            {/* Metadata: time and word count */}
+            <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400 mt-1">
+              {statement.time && (
+                <div className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  <time dateTime={statement.time}>
+                    {format(new Date(statement.time), 'PPp', { locale: dateLocale })}
+                  </time>
+                </div>
+              )}
+              {statement.wordcount && (
+                <div className="flex items-center gap-1">
+                  <Hash className="h-3 w-3" />
+                  <span>{statement.wordcount} words</span>
+                </div>
+              )}
+              {motionResult.hasMotion && motionResult.outcome && (
+                <span className={`px-2 py-0.5 rounded-full ${getMotionBadgeColors(motionResult.outcome)} font-medium`}>
+                  {motionResult.displayText}
+                </span>
+              )}
             </div>
-          )}
-          {statement.wordcount && (
-            <div className="flex items-center gap-1">
-              <Hash className="h-3 w-3" />
-              <span>{statement.wordcount} words</span>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -382,13 +441,16 @@ export const ThreadedSpeechCard = React.memo(function ThreadedSpeechCard({
   showContext = true,
   onStatementClick,
   className = '',
+  variant = 'partisan',
 }: ThreadedSpeechCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const locale = useLocale();
   const bilingualRoot = getBilingualContent(rootStatement, locale);
 
   const hasReplies = replies.length > 0;
-  const rootColors = getPartyColors(rootStatement.madeBy?.party || '');
+  const rootColors = variant === 'neutral'
+    ? getNeutralColors()
+    : getPartyColors(rootStatement.madeBy?.party || '');
 
   return (
     <div className={`relative ${className}`}>
@@ -396,6 +458,7 @@ export const ThreadedSpeechCard = React.memo(function ThreadedSpeechCard({
       <StatementCard
         statement={rootStatement}
         onClick={() => onStatementClick?.(rootStatement)}
+        variant={variant}
       />
 
       {/* Replies toggle button */}
@@ -482,6 +545,7 @@ export const ThreadedSpeechCard = React.memo(function ThreadedSpeechCard({
                 statement={reply}
                 isReply
                 onClick={() => onStatementClick?.(reply)}
+                variant={variant}
               />
             ))}
           </div>

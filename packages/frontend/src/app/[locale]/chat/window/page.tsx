@@ -34,7 +34,8 @@ export default function ChatWindowPage() {
     if (!user) return;
     checkQuota();
     refreshUsageStats();
-  }, [user, checkQuota, refreshUsageStats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]); // checkQuota and refreshUsageStats are stable Zustand store functions
 
   // Welcome flow for first-time users
   React.useEffect(() => {

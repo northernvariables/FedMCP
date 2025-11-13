@@ -210,7 +210,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         // Store subscription info and dates in token
         const { data: profile } = await (getSupabaseAdmin()
           .from('user_profiles') as any)
-          .select('subscription_tier, monthly_usage, created_at, usage_reset_date')
+          .select('subscription_tier, monthly_usage, created_at, usage_reset_date, is_beta_tester, uses_own_key, credit_balance, preferred_mp_id, postal_code, show_my_mp_section')
           .eq('id', userId)
           .single();
 
@@ -219,6 +219,12 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
           token.monthlyUsage = profile.monthly_usage;
           token.createdAt = profile.created_at;
           token.usageResetDate = profile.usage_reset_date;
+          token.isBetaTester = profile.is_beta_tester;
+          token.usesOwnKey = profile.uses_own_key;
+          token.creditBalance = profile.credit_balance;
+          token.preferredMpId = profile.preferred_mp_id;
+          token.postalCode = profile.postal_code;
+          token.showMyMpSection = profile.show_my_mp_section ?? true; // Default to true
         }
 
         // If this is an OAuth sign in, store the account
@@ -271,7 +277,7 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         // Token refresh - update subscription data
         const { data: profile } = await (getSupabaseAdmin()
           .from('user_profiles') as any)
-          .select('subscription_tier, monthly_usage, usage_reset_date')
+          .select('subscription_tier, monthly_usage, usage_reset_date, is_beta_tester, uses_own_key, credit_balance, preferred_mp_id, postal_code, show_my_mp_section')
           .eq('id', token.id as string)
           .single();
 
@@ -279,6 +285,12 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
           token.subscriptionTier = profile.subscription_tier;
           token.monthlyUsage = profile.monthly_usage;
           token.usageResetDate = profile.usage_reset_date;
+          token.isBetaTester = profile.is_beta_tester;
+          token.usesOwnKey = profile.uses_own_key;
+          token.creditBalance = profile.credit_balance;
+          token.preferredMpId = profile.preferred_mp_id;
+          token.postalCode = profile.postal_code;
+          token.showMyMpSection = profile.show_my_mp_section ?? true; // Default to true
         }
       }
       return token;
@@ -291,6 +303,12 @@ export const {auth, handlers, signIn, signOut } = NextAuth({
         session.user.createdAt = token.createdAt as string;
         session.user.usageResetDate = token.usageResetDate as string;
         session.user.linkedProviders = token.linkedProviders as string[];
+        session.user.isBetaTester = (token.isBetaTester as boolean) || false;
+        session.user.usesOwnKey = (token.usesOwnKey as boolean) || false;
+        session.user.creditBalance = (token.creditBalance as number) || 0;
+        session.user.preferredMpId = token.preferredMpId as string | null;
+        session.user.postalCode = token.postalCode as string | null;
+        session.user.showMyMpSection = token.showMyMpSection !== undefined ? (token.showMyMpSection as boolean) : true;
       }
       return session;
     },

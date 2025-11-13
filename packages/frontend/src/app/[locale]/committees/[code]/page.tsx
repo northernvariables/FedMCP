@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { Users, FileText, Building2, Calendar, MessageSquare, ExternalLink, TrendingUp, BarChart3 } from 'lucide-react';
 import { PartyLogo } from '@/components/PartyLogo';
 import { ShareButton } from '@/components/ShareButton';
+import { BookmarkButton } from '@/components/bookmarks/BookmarkButton';
 import { Tabs } from '@/components/Tabs';
 import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
 
@@ -76,8 +77,23 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
       <main className="flex-1 page-container">
         {/* Committee Header */}
         <div className="mb-8 relative">
-          {/* Share Button - Top Right */}
-          <div className="absolute top-0 right-0">
+          {/* Bookmark and Share Buttons - Top Right */}
+          <div className="absolute top-0 right-0 flex gap-2">
+            <BookmarkButton
+              bookmarkData={{
+                itemType: 'committee',
+                itemId: committee.code,
+                title: committee.name,
+                subtitle: `${committee.chamber} Committee`,
+                url: `/${locale}/committees/${committee.code}`,
+                metadata: {
+                  chamber: committee.chamber,
+                  acronym: committee.code,
+                  mandate: committee.mandate,
+                },
+              }}
+              size="md"
+            />
             <ShareButton
               url={`/${locale}/committees/${committee.code}`}
               title={`${committee.name} - ${committee.code}`}
@@ -86,7 +102,7 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
             />
           </div>
 
-          <div className="pr-12">
+          <div className="pr-24">
             <div className="flex items-center gap-2 mb-2">
               <h1 className="text-4xl font-bold text-text-primary">{committee.name}</h1>
               <span className={`text-sm px-3 py-1 rounded ${
@@ -434,10 +450,13 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                   ) : meetings.length > 0 ? (
                     <div className="space-y-3">
                       {meetings.map((meeting: any) => (
-                        <div
-                          key={`${meeting.date}-${meeting.number}`}
-                          className="p-4 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors"
+                        <Link
+                          key={meeting.id}
+                          href={`/${locale}/committees/${code}/meetings/${meeting.id}`}
                         >
+                          <div
+                            className="p-4 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors cursor-pointer"
+                          >
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-3">
                               <Calendar className="h-5 w-5 text-accent-red" />
@@ -473,12 +492,14 @@ export default function CommitteeDetailPage({ params }: { params: Promise<{ code
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-sm text-accent-red hover:text-accent-red-hover font-medium flex items-center gap-1 mt-2"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               View on OpenParliament
                               <ExternalLink className="h-3 w-3" />
                             </a>
                           )}
-                        </div>
+                          </div>
+                        </Link>
                       ))}
                     </div>
                   ) : (

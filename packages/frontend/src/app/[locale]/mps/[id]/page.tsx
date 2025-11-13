@@ -4,7 +4,7 @@
 
 'use client';
 
-import React, { use, useEffect, useState } from 'react';
+import React, { use, useEffect, useState, useCallback } from 'react';
 import { useQuery } from '@apollo/client';
 import { useLocale } from 'next-intl';
 import { Header } from '@/components/Header';
@@ -24,12 +24,15 @@ import {
   GET_MP_SCORECARD,
   GET_MP_NEWS,
   GET_MP_SPEECHES,
-  GET_MP_LOBBY_COMMUNICATIONS
+  GET_MP_LOBBY_COMMUNICATIONS,
+  GET_MP_WRITTEN_QUESTIONS,
+  GET_MP_ANSWERED_QUESTIONS,
+  GET_WRITTEN_QUESTION_SESSIONS
 } from '@/lib/queries';
 import Link from 'next/link';
 import { formatCAD } from '@canadagpt/design-system';
 import { getMPPhotoUrl } from '@/lib/utils/mpPhotoUrl';
-import { Mail, Phone, Twitter, MapPin, Award, FileText, TrendingUp, ExternalLink, Building2, Crown, BarChart3, Newspaper, CheckCircle2, XCircle, MinusCircle, Vote, MessageSquare, Calendar, Hash, Users } from 'lucide-react';
+import { Mail, Phone, Twitter, MapPin, Award, FileText, TrendingUp, ExternalLink, Building2, Crown, BarChart3, Newspaper, CheckCircle2, XCircle, MinusCircle, Vote, MessageSquare, Calendar, Hash, Users, Info, HelpCircle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { PartyLogo } from '@/components/PartyLogo';
 import { usePageThreading } from '@/contexts/UserPreferencesContext';
 import { ThreadToggle, ConversationThread } from '@/components/hansard';
@@ -49,25 +52,34 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
     variables: { mpId: id },
   });
 
-  // Lazy-loaded tab data - only fetched when tab is clicked
-  const { data: legislationData, loading: legislationLoading, refetch: refetchLegislation } = useQuery(GET_MP_LEGISLATION, {
+  // Fetch available sessions for written questions
+  const { data: sessionsData } = useQuery(GET_WRITTEN_QUESTION_SESSIONS);
+
+  // Track which tabs have been loaded
+  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set(['overview']));
+
+  // Session filter state for written questions
+  const [selectedSession, setSelectedSession] = useState<string>('45-1'); // Default to current session
+
+  // Lazy-loaded tab data - fetched when tab is first clicked
+  const { data: legislationData, loading: legislationLoading } = useQuery(GET_MP_LEGISLATION, {
     variables: { id },
-    skip: true, // Don't fetch initially
+    skip: !loadedTabs.has('legislation'),
   });
 
-  const { data: expensesData, loading: expensesLoading, refetch: refetchExpenses } = useQuery(GET_MP_EXPENSES, {
+  const { data: expensesData, loading: expensesLoading } = useQuery(GET_MP_EXPENSES, {
     variables: { id },
-    skip: true, // Don't fetch initially
+    skip: !loadedTabs.has('expenses'),
   });
 
-  const { data: votesData, loading: votesLoading, refetch: refetchVotes } = useQuery(GET_MP_VOTES, {
+  const { data: votesData, loading: votesLoading } = useQuery(GET_MP_VOTES, {
     variables: { id },
-    skip: true, // Don't fetch initially
+    skip: !loadedTabs.has('votes'),
   });
 
-  const { data: committeesData, loading: committeesLoading, refetch: refetchCommittees } = useQuery(GET_MP_COMMITTEES, {
+  const { data: committeesData, loading: committeesLoading } = useQuery(GET_MP_COMMITTEES, {
     variables: { id },
-    skip: true, // Don't fetch initially
+    skip: !loadedTabs.has('committees'),
   });
 
   // Hardcoded global average for now (TODO: fix fetch)
@@ -76,40 +88,41 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
   const mp = data?.mps?.[0];
   const scorecard = scorecardData?.mpScorecard;
 
+  // Determine if MP is government (Liberal party) to use appropriate query
+  const isGovernmentMP = mp?.party === 'Liberal';
+
+  // Use different queries for government vs opposition MPs
+  // Government MPs: Get questions they ANSWERED (with opposition question shown)
+  // Opposition MPs: Get questions they ASKED (with government answer shown)
+  const { data: writtenQuestionsData, loading: writtenQuestionsLoading } = useQuery(
+    isGovernmentMP ? GET_MP_ANSWERED_QUESTIONS : GET_MP_WRITTEN_QUESTIONS,
+    {
+      variables: { mpId: id, limit: 50, session: selectedSession === 'all' ? null : selectedSession },
+      skip: !loadedTabs.has('questions') || !mp, // Wait for MP data to determine which query to use
+    }
+  );
+
   // Merge lazy-loaded data with initial data
   const mpLegislation = legislationData?.mps?.[0];
   const mpExpenses = expensesData?.mps?.[0];
   const mpVotes = votesData?.mps?.[0];
   const mpCommittees = committeesData?.mps?.[0];
 
-  // Track which tabs have been loaded
-  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set(['overview']));
-
-  // Handle tab change to lazy-load data
-  const handleTabChange = (tabId: string) => {
-    if (loadedTabs.has(tabId)) return; // Already loaded
-
-    switch (tabId) {
-      case 'legislation':
-        refetchLegislation();
-        break;
-      case 'expenses':
-        refetchExpenses();
-        break;
-      case 'votes':
-        refetchVotes();
-        break;
-      case 'committees':
-        refetchCommittees();
-        break;
-    }
-
-    setLoadedTabs(prev => new Set([...prev, tabId]));
-  };
+  // Handle tab change to trigger lazy loading
+  const handleTabChange = useCallback((tabId: string) => {
+    setLoadedTabs(prev => {
+      // Only update if the tab isn't already loaded (prevents infinite loop)
+      if (prev.has(tabId)) {
+        return prev;
+      }
+      return new Set([...prev, tabId]);
+    });
+  }, []); // setLoadedTabs is stable from useState
 
   const { data: newsData, loading: newsLoading } = useQuery(GET_MP_NEWS, {
     variables: { mpName: mp?.name || '', limit: 10 },
     skip: !mp?.name,
+    fetchPolicy: 'cache-and-network', // Always fetch fresh data while showing cached data
   });
 
   const { data: speechesData, loading: speechesLoading } = useQuery(GET_MP_SPEECHES, {
@@ -117,7 +130,9 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
   });
 
   const [speechFilter, setSpeechFilter] = useState<string>('all'); // 'all', 'D' (Debates), 'E' (Committee)
+  const [questionFilter, setQuestionFilter] = useState<string>('all'); // 'all', 'answered', 'unanswered'
   const [expandedSpeeches, setExpandedSpeeches] = useState<Set<string>>(new Set());
+  const [expandedAnswers, setExpandedAnswers] = useState<Set<string>>(new Set());
   const [imageError, setImageError] = useState(false);
 
   // Lobbying pagination state
@@ -377,24 +392,114 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                         Performance Scorecard
                       </h2>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        <div>
-                          <div className="text-3xl font-bold text-accent-red">{scorecard.bills_sponsored}</div>
-                          <div className="text-sm text-text-secondary">Bills Sponsored</div>
-                        </div>
-                        <div>
-                          <div className="text-3xl font-bold text-accent-red">{scorecard.bills_passed}</div>
-                          <div className="text-sm text-text-secondary">Bills Passed</div>
-                        </div>
-                        <div>
-                          <div className="text-3xl font-bold text-accent-red">
-                            {formatCAD(scorecard.current_year_expenses, { compact: true })}
+                      {/* Calculated Performance Metrics */}
+                      <div className="mb-6 pb-6 border-b border-border-subtle">
+                        <h3 className="text-lg font-semibold text-text-primary mb-4">Performance Metrics</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                          {/* Voting Participation Rate */}
+                          <div className="group relative">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="text-3xl font-bold text-accent-red">
+                                {scorecard.voting_participation_rate != null
+                                  ? `${scorecard.voting_participation_rate.toFixed(1)}%`
+                                  : 'N/A'}
+                              </div>
+                              <div className="relative">
+                                <Info className="h-4 w-4 text-text-tertiary cursor-help" />
+                                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-bg-overlay border border-border-subtle rounded-lg shadow-lg z-10">
+                                  <p className="text-xs text-text-secondary">
+                                    Percentage of parliamentary votes this MP participated in. Higher is better, showing active engagement in legislative decisions.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-sm text-text-secondary">Voting Participation</div>
                           </div>
-                          <div className="text-sm text-text-secondary">Current Year Expenses</div>
+
+                          {/* Party Discipline Score */}
+                          <div className="group relative">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="text-3xl font-bold text-accent-red">
+                                {scorecard.party_discipline_score != null
+                                  ? `${scorecard.party_discipline_score.toFixed(1)}%`
+                                  : 'N/A'}
+                              </div>
+                              <div className="relative">
+                                <Info className="h-4 w-4 text-text-tertiary cursor-help" />
+                                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-bg-overlay border border-border-subtle rounded-lg shadow-lg z-10">
+                                  <p className="text-xs text-text-secondary">
+                                    Percentage of votes where this MP voted with their party's majority position. Neither high nor low is inherently better - this measures alignment with party consensus.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-sm text-text-secondary">Party Discipline</div>
+                          </div>
+
+                          {/* Legislative Success Rate */}
+                          <div className="group relative">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="text-3xl font-bold text-accent-red">
+                                {scorecard.legislative_success_rate != null
+                                  ? `${scorecard.legislative_success_rate.toFixed(1)}%`
+                                  : 'N/A'}
+                              </div>
+                              <div className="relative">
+                                <Info className="h-4 w-4 text-text-tertiary cursor-help" />
+                                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-bg-overlay border border-border-subtle rounded-lg shadow-lg z-10">
+                                  <p className="text-xs text-text-secondary">
+                                    Percentage of bills sponsored by this MP that became law. Higher indicates greater legislative effectiveness and influence.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-sm text-text-secondary">Legislative Success</div>
+                          </div>
+
+                          {/* Committee Activity Index */}
+                          <div className="group relative">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="text-3xl font-bold text-accent-red">
+                                {scorecard.committee_activity_index != null
+                                  ? scorecard.committee_activity_index.toFixed(1)
+                                  : 'N/A'}
+                              </div>
+                              <div className="relative">
+                                <Info className="h-4 w-4 text-text-tertiary cursor-help" />
+                                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-bg-overlay border border-border-subtle rounded-lg shadow-lg z-10">
+                                  <p className="text-xs text-text-secondary">
+                                    Weighted score measuring committee involvement (1 point per membership + 0.1 points per statement). Higher scores indicate more active committee participation.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-sm text-text-secondary">Committee Activity</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-3xl font-bold text-accent-red">{scorecard.question_period_interjections || 0}</div>
-                          <div className="text-sm text-text-secondary">Question Period Interjections</div>
+                      </div>
+
+                      {/* Activity Statistics */}
+                      <div>
+                        <h3 className="text-lg font-semibold text-text-primary mb-4">Activity Statistics</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                          <div>
+                            <div className="text-3xl font-bold text-accent-red">{scorecard.bills_sponsored}</div>
+                            <div className="text-sm text-text-secondary">Bills Sponsored</div>
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold text-accent-red">{scorecard.bills_passed}</div>
+                            <div className="text-sm text-text-secondary">Bills Passed</div>
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold text-accent-red">
+                              {formatCAD(scorecard.current_year_expenses, { compact: true })}
+                            </div>
+                            <div className="text-sm text-text-secondary">Current Year Expenses</div>
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold text-accent-red">{scorecard.question_period_interjections || 0}</div>
+                            <div className="text-sm text-text-secondary">Question Period Interjections</div>
+                          </div>
                         </div>
                       </div>
                     </Card>
@@ -431,7 +536,12 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                           const voteResultLabel = vote.result === 'Y' ? 'Motion Passed' : vote.result === 'N' ? 'Motion Failed' : 'Unknown Result';
                           const voteResultColor = vote.result === 'Y' ? 'text-green-400' : 'text-red-400';
 
-                          return (
+                          // Build link to bill if subjectOf exists
+                          const billLink = vote.subjectOf?.session && vote.subjectOf?.number
+                            ? `/${locale}/bills/${vote.subjectOf.session}/${vote.subjectOf.number}`
+                            : null;
+
+                          const VoteCard = (
                             <div
                               key={vote.id}
                               className="p-3 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors"
@@ -465,6 +575,15 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                                 <span>Nays: {vote.nays}</span>
                               </div>
                             </div>
+                          );
+
+                          // Wrap in Link if bill exists, otherwise return card as-is
+                          return billLink ? (
+                            <Link key={vote.id} href={billLink}>
+                              {VoteCard}
+                            </Link>
+                          ) : (
+                            VoteCard
                           );
                         })}
                       </div>
@@ -585,6 +704,267 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                     </div>
                   ) : (
                     <p className="text-text-secondary">No sponsored bills found.</p>
+                  )}
+                </Card>
+              ),
+            },
+            {
+              id: 'questions',
+              label: 'Written Questions',
+              content: writtenQuestionsLoading ? (
+                <Card><Loading /></Card>
+              ) : (
+                <Card>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold text-text-primary flex items-center">
+                      <HelpCircle className="h-6 w-6 mr-2 text-accent-red" />
+                      Written Questions
+                    </h2>
+                    {/* Session selector and filter buttons */}
+                    <div className="flex gap-3">
+                      {/* Session selector */}
+                      <select
+                        value={selectedSession}
+                        onChange={(e) => setSelectedSession(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium bg-bg-elevated text-text-primary border border-border-subtle hover:bg-bg-overlay transition-colors"
+                      >
+                        <option value="all">All Sessions</option>
+                        {sessionsData?.writtenQuestionSessions?.map((session: string) => (
+                          <option key={session} value={session}>
+                            Session {session}
+                          </option>
+                        ))}
+                      </select>
+                      {/* Answer status filter buttons */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setQuestionFilter('all')}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            questionFilter === 'all'
+                              ? 'bg-accent-red text-white'
+                              : 'bg-bg-elevated text-text-secondary hover:bg-bg-overlay'
+                          }`}
+                        >
+                          All
+                        </button>
+                        <button
+                          onClick={() => setQuestionFilter('answered')}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            questionFilter === 'answered'
+                              ? 'bg-accent-red text-white'
+                              : 'bg-bg-elevated text-text-secondary hover:bg-bg-overlay'
+                          }`}
+                        >
+                          Answered
+                        </button>
+                        <button
+                          onClick={() => setQuestionFilter('unanswered')}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            questionFilter === 'unanswered'
+                              ? 'bg-accent-red text-white'
+                              : 'bg-bg-elevated text-text-secondary hover:bg-bg-overlay'
+                          }`}
+                        >
+                          Unanswered
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {((writtenQuestionsData?.mpWrittenQuestions && writtenQuestionsData.mpWrittenQuestions.length > 0) ||
+                    (writtenQuestionsData?.mpAnsweredQuestions && writtenQuestionsData.mpAnsweredQuestions.length > 0)) ? (
+                    <div className="space-y-4">
+                      {(writtenQuestionsData.mpWrittenQuestions || writtenQuestionsData.mpAnsweredQuestions)
+                        .filter((item: any) => {
+                          // Handle both response formats
+                          const hasAnswer = isGovernmentMP ? item.answer != null : item.answer != null;
+                          if (questionFilter === 'answered') return hasAnswer;
+                          if (questionFilter === 'unanswered') return !hasAnswer;
+                          return true;
+                        })
+                        .map((item: any) => {
+                        // Normalize data structure for both opposition and government MPs
+                        // Opposition MPs: item = Statement (the question), item.answer = government response
+                        // Government MPs: item = { question: Statement, answer: Statement, partOf: Document }
+                        const question = isGovernmentMP ? item.question : item;
+                        const answer = isGovernmentMP ? item.answer : item.answer;
+                        const partOf = isGovernmentMP ? item.partOf : item.partOf;
+
+                        // Extract question number from h3_en
+                        const questionNumber = question.h3_en?.match(/Question No\.\s*(\d+)/i)?.[1];
+                        const content = locale === 'fr' && question.content_fr ? question.content_fr : question.content_en;
+                        const h3 = locale === 'fr' && question.h3_fr ? question.h3_fr : question.h3_en;
+                        const hasAnswer = answer != null;
+                        const answerContent = locale === 'fr' && answer?.content_fr
+                          ? answer.content_fr
+                          : answer?.content_en;
+                        const isAnswerExpanded = expandedAnswers.has(question.id);
+
+                        return (
+                          <div
+                            key={question.id}
+                            className="p-4 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors border border-border-subtle"
+                          >
+                            {/* Header with MP info, badges, and metadata */}
+                            <div className="flex gap-4 mb-3">
+                              {/* MP Photo */}
+                              {question.madeBy && (
+                                <Link href={`/${locale}/mps/${question.madeBy.id}`}>
+                                  <div className="relative w-16 h-16 flex-shrink-0 rounded overflow-hidden bg-bg-overlay">
+                                    <img
+                                      src={getMPPhotoUrl(question.madeBy)}
+                                      alt={question.madeBy.name}
+                                      className="w-full h-full object-cover"
+                                      style={{ objectPosition: 'center -6px' }}
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).src = '/default-avatar.png';
+                                      }}
+                                    />
+                                  </div>
+                                </Link>
+                              )}
+
+                              {/* Main content area */}
+                              <div className="flex-1 min-w-0">
+                                {/* Top row: MP name, party logo, badges */}
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {/* MP Name */}
+                                    {question.madeBy && (
+                                      <Link
+                                        href={`/${locale}/mps/${question.madeBy.id}`}
+                                        className="font-semibold text-text-primary hover:text-accent-red transition-colors"
+                                      >
+                                        {question.madeBy.name}
+                                      </Link>
+                                    )}
+                                    {/* Party Logo */}
+                                    {question.madeBy?.party && (
+                                      <PartyLogo party={question.madeBy.party} size="sm" />
+                                    )}
+                                  </div>
+                                  {/* Date */}
+                                  {partOf?.date && (
+                                    <div className="flex items-center gap-1 text-sm text-text-secondary flex-shrink-0">
+                                      <Calendar className="h-4 w-4" />
+                                      {new Date(partOf.date).toLocaleDateString()}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Second row: Question title with badges */}
+                                <div className="flex items-center gap-2 flex-wrap mb-2">
+                                  {questionNumber && (
+                                    <span className="px-2 py-1 rounded bg-accent-red/20 text-accent-red text-sm font-semibold">
+                                      Q{questionNumber}
+                                    </span>
+                                  )}
+                                  {/* Answer status badge */}
+                                  <span className={`px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 ${
+                                    hasAnswer
+                                      ? 'bg-green-500/20 text-green-400'
+                                      : 'bg-yellow-500/20 text-yellow-400'
+                                  }`}>
+                                    {hasAnswer ? (
+                                      <>
+                                        <CheckCircle2 className="h-3 w-3" />
+                                        Answered
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Clock className="h-3 w-3" />
+                                        Pending Response
+                                      </>
+                                    )}
+                                  </span>
+                                  {/* Complete question title with MP name */}
+                                  {h3 && question.madeBy && (
+                                    <h3 className="font-semibold text-text-primary">
+                                      {h3}{question.madeBy.name}
+                                    </h3>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Question content */}
+                            {content && (
+                              <div className="text-sm text-text-secondary mb-3 whitespace-pre-wrap">
+                                {content}
+                              </div>
+                            )}
+
+                            {/* Government response */}
+                            {hasAnswer && answerContent && (
+                              <div className="mt-4 pt-4 border-t border-border-subtle">
+                                <button
+                                  onClick={() => {
+                                    const newExpanded = new Set(expandedAnswers);
+                                    if (isAnswerExpanded) {
+                                      newExpanded.delete(question.id);
+                                    } else {
+                                      newExpanded.add(question.id);
+                                    }
+                                    setExpandedAnswers(newExpanded);
+                                  }}
+                                  className="flex items-center gap-2 text-sm font-semibold text-accent-red hover:text-accent-red/80 transition-colors mb-2"
+                                >
+                                  {isAnswerExpanded ? (
+                                    <ChevronUp className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4" />
+                                  )}
+                                  Government Response
+                                </button>
+                                {isAnswerExpanded && (
+                                  <div className="mt-2">
+                                    <div className="text-sm text-text-primary whitespace-pre-wrap bg-bg-overlay/50 p-3 rounded-lg">
+                                      {answerContent}
+                                    </div>
+                                    {answer?.who_en && (
+                                      <div className="mt-2 text-xs text-text-tertiary flex items-center gap-1">
+                                        <Users className="h-3 w-3" />
+                                        {locale === 'fr' && answer.who_fr ? answer.who_fr : answer.who_en}
+                                      </div>
+                                    )}
+                                    {answer?.time && (
+                                      <div className="mt-1 text-xs text-text-tertiary flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        {new Date(answer.time).toLocaleDateString()}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Footer with links and metadata */}
+                            <div className="mt-3 flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                {/* View in Hansard link */}
+                                {partOf?.id && (
+                                  <Link
+                                    href={`/${locale}/debates/${partOf.id}#${question.id}`}
+                                    className="inline-flex items-center gap-1 text-sm text-accent-red hover:text-accent-red/80 font-medium"
+                                  >
+                                    View in Hansard
+                                    <ExternalLink className="h-3 w-3" />
+                                  </Link>
+                                )}
+                              </div>
+                              {/* Word count */}
+                              {question.wordcount && (
+                                <div className="text-xs text-text-tertiary">
+                                  {question.wordcount} {locale === 'fr' ? 'mots' : 'words'}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-text-secondary">No written questions found.</p>
                   )}
                 </Card>
               ),
@@ -713,7 +1093,12 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                         const voteResultLabel = vote.result === 'Y' ? 'Motion Passed' : vote.result === 'N' ? 'Motion Failed' : 'Unknown Result';
                         const voteResultColor = vote.result === 'Y' ? 'text-green-400' : 'text-red-400';
 
-                        return (
+                        // Build link to bill if subjectOf exists
+                        const billLink = vote.subjectOf?.session && vote.subjectOf?.number
+                          ? `/${locale}/bills/${vote.subjectOf.session}/${vote.subjectOf.number}`
+                          : null;
+
+                        const VoteCard = (
                           <div
                             key={vote.id}
                             className="p-4 rounded-lg bg-bg-elevated hover:bg-bg-elevated/80 transition-colors"
@@ -754,6 +1139,15 @@ export default function MPDetailPage({ params }: { params: Promise<{ id: string 
                               </div>
                             </div>
                           </div>
+                        );
+
+                        // Wrap in Link if bill exists, otherwise return card as-is
+                        return billLink ? (
+                          <Link key={vote.id} href={billLink}>
+                            {VoteCard}
+                          </Link>
+                        ) : (
+                          VoteCard
                         );
                       })}
                     </div>

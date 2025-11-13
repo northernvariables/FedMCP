@@ -124,6 +124,14 @@ def ingest_mps(neo4j_client: Neo4jClient, batch_size: int = 10000) -> int:
             links = mp_data.get("links", [])
             ourcommons_url = next((link["url"] for link in links if "ourcommons.ca" in link.get("url", "")), None)
 
+            # Extract photo URL from OpenParliament
+            # The 'image' field contains a relative path like "polpics/name.jpg"
+            # We'll store it as photo_url_source for the 3-tier fallback system
+            photo_url_source = mp_data.get("image")
+            if photo_url_source and not photo_url_source.startswith("http"):
+                # Convert relative path to full OpenParliament URL
+                photo_url_source = f"https://www.openparliament.ca{photo_url_source}" if photo_url_source.startswith("/") else f"https://www.openparliament.ca/{photo_url_source}"
+
             mp_props = {
                 "id": mp_id,
                 "name": mp_data.get("name"),
@@ -142,6 +150,7 @@ def ingest_mps(neo4j_client: Neo4jClient, batch_size: int = 10000) -> int:
                 "constituency_office": constituency_office,
                 "ourcommons_url": ourcommons_url,
                 "cabinet_position": cabinet_positions.get(mp_id),
+                "photo_url_source": photo_url_source,  # OpenParliament photo URL (auto-updated)
                 "updated_at": datetime.utcnow().isoformat(),
             }
 
@@ -158,12 +167,18 @@ def ingest_mps(neo4j_client: Neo4jClient, batch_size: int = 10000) -> int:
             current_riding = mp_summary.get("current_riding") or {}
             riding_name = current_riding.get("name", {}).get("en") if isinstance(current_riding.get("name"), dict) else current_riding.get("name")
 
+            # Extract photo URL from summary if available
+            photo_url_source = mp_summary.get("image")
+            if photo_url_source and not photo_url_source.startswith("http"):
+                photo_url_source = f"https://www.openparliament.ca{photo_url_source}" if photo_url_source.startswith("/") else f"https://www.openparliament.ca/{photo_url_source}"
+
             mp_props = {
                 "id": mp_id,
                 "name": mp_summary.get("name"),
                 "party": party_name,
                 "riding": riding_name,
                 "current": mp_summary.get("current", True),
+                "photo_url_source": photo_url_source,
                 "updated_at": datetime.utcnow().isoformat(),
             }
             mp_props = {k: v for k, v in mp_props.items() if v is not None}
