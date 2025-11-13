@@ -39,7 +39,7 @@ export function CollectionManager({
   const [newCollectionDesc, setNewCollectionDesc] = useState('');
   const [creating, setCreating] = useState(false);
 
-  const tier = profile?.tier || 'FREE';
+  const tier = profile?.subscription_tier || 'FREE';
   const canUseCollections = tier === 'BASIC' || tier === 'PRO';
 
   const handleCreate = async () => {
