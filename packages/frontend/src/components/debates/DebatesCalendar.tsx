@@ -308,7 +308,7 @@ export function DebatesCalendar({ onDateRangeSelect, selectedStartDate, selected
                   disabled={!isCurrentMonth || !hasDebates}
                   tabIndex={isCurrentMonth && hasDebates ? 0 : -1}
                   className={`
-                    relative w-full h-10 p-0.5 text-sm rounded-lg transition-all
+                    relative w-full h-12 p-1 text-sm rounded-lg transition-all flex flex-col items-center justify-start gap-0.5
                     ${isCurrentMonth ? 'text-text-primary' : 'text-text-tertiary'}
                     ${hasDebates && isCurrentMonth ? 'cursor-pointer border-2 border-transparent hover:border-accent-red hover:shadow-md' : 'cursor-default border-2 border-transparent'}
                     ${isToday ? 'ring-2 ring-accent-red ring-offset-1' : ''}
@@ -319,22 +319,23 @@ export function DebatesCalendar({ onDateRangeSelect, selectedStartDate, selected
                     ${isFocused ? 'ring-2 ring-blue-500' : ''}
                   `}
                 >
-                  <div className="text-center text-xs">{format(day, 'd')}</div>
+                  {/* Day number at top */}
+                  <div className="text-center text-xs leading-none">{format(day, 'd')}</div>
 
-                  {/* Debate indicator squares - 2x2 grid */}
+                  {/* Debate indicator squares - 2x2 grid below the number */}
                   {hasDebates && isCurrentMonth && (
-                    <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 grid grid-cols-2 gap-0.5 w-5 h-5">
+                    <div className="grid grid-cols-2 gap-[2px] w-[18px] h-[18px]">
                       {/* Top Left - House (Green) */}
-                      <div className={`w-2 h-2 rounded-sm ${debate?.hasHouseDebates ? 'bg-green-500' : 'bg-transparent'}`} />
+                      <div className={`w-2 h-2 rounded-sm ${debate?.hasHouseDebates ? 'bg-green-500' : 'bg-text-tertiary/15'}`} />
 
                       {/* Top Right - QP (Blue) */}
-                      <div className={`w-2 h-2 rounded-sm ${debate?.hasQuestionPeriod ? 'bg-blue-500' : 'bg-transparent'}`} />
+                      <div className={`w-2 h-2 rounded-sm ${debate?.hasQuestionPeriod ? 'bg-blue-500' : 'bg-text-tertiary/15'}`} />
 
                       {/* Bottom Left - Committee (Yellow) */}
-                      <div className={`w-2 h-2 rounded-sm ${debate?.hasCommittee ? 'bg-yellow-500' : 'bg-transparent'}`} />
+                      <div className={`w-2 h-2 rounded-sm ${debate?.hasCommittee ? 'bg-yellow-500' : 'bg-text-tertiary/15'}`} />
 
                       {/* Bottom Right - Scheduled (Purple) */}
-                      <div className={`w-2 h-2 rounded-sm ${debate?.hasScheduledMeeting ? 'bg-purple-500' : 'bg-transparent'}`} />
+                      <div className={`w-2 h-2 rounded-sm ${debate?.hasScheduledMeeting ? 'bg-purple-500' : 'bg-text-tertiary/15'}`} />
                     </div>
                   )}
                 </button>
@@ -355,7 +356,7 @@ export function DebatesCalendar({ onDateRangeSelect, selectedStartDate, selected
                     <div className="space-y-1.5">
                       {debate.hasHouseDebates && (
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-sm bg-blue-500 flex-shrink-0" />
+                          <div className="w-2 h-2 rounded-sm bg-green-500 flex-shrink-0" />
                           <span className="text-xs text-text-secondary">
                             {locale === 'fr' ? 'Débats de la Chambre' : 'House Debates'}
                           </span>
@@ -363,7 +364,7 @@ export function DebatesCalendar({ onDateRangeSelect, selectedStartDate, selected
                       )}
                       {debate.hasQuestionPeriod && (
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-sm bg-red-500 flex-shrink-0" />
+                          <div className="w-2 h-2 rounded-sm bg-blue-500 flex-shrink-0" />
                           <span className="text-xs text-text-secondary">
                             {locale === 'fr' ? 'Période des questions' : 'Question Period'}
                           </span>
@@ -371,7 +372,7 @@ export function DebatesCalendar({ onDateRangeSelect, selectedStartDate, selected
                       )}
                       {debate.hasCommittee && (
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-sm bg-green-500 flex-shrink-0" />
+                          <div className="w-2 h-2 rounded-sm bg-yellow-500 flex-shrink-0" />
                           <span className="text-xs text-text-secondary">
                             {locale === 'fr' ? 'Témoignages de comité' : 'Committee Testimony'}
                           </span>
@@ -468,37 +469,37 @@ export function DebatesCalendar({ onDateRangeSelect, selectedStartDate, selected
       {/* Legend - 2x2 Grid Positions */}
       <div className="flex items-center gap-4 mb-3 text-xs text-text-secondary flex-wrap">
         <div className="flex items-center gap-1.5">
-          <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
+          <div className="grid grid-cols-2 gap-[1.5px] w-[15px] h-[15px]">
             <div className="w-1.5 h-1.5 rounded-sm bg-green-500" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
           </div>
           <span>{locale === 'fr' ? 'Chambre' : 'House'}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
+          <div className="grid grid-cols-2 gap-[1.5px] w-[15px] h-[15px]">
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
             <div className="w-1.5 h-1.5 rounded-sm bg-blue-500" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
           </div>
           <span>{locale === 'fr' ? 'PQ' : 'QP'}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
+          <div className="grid grid-cols-2 gap-[1.5px] w-[15px] h-[15px]">
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
             <div className="w-1.5 h-1.5 rounded-sm bg-yellow-500" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
           </div>
           <span>{locale === 'fr' ? 'Comité' : 'Committee'}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
-            <div className="w-1.5 h-1.5 rounded-sm bg-transparent" />
+          <div className="grid grid-cols-2 gap-[1.5px] w-[15px] h-[15px]">
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
+            <div className="w-1.5 h-1.5 rounded-sm bg-text-tertiary/15" />
             <div className="w-1.5 h-1.5 rounded-sm bg-purple-500" />
           </div>
           <span>{locale === 'fr' ? 'Prévue' : 'Scheduled'}</span>
